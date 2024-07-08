@@ -1,0 +1,24 @@
+[package]
+name = "fmc_noise"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/formulaicgame/fmc_noise/"
+description = "SIMD procedural noise library"
+license = "MIT OR Apache-2.0"
+keywords = ["simd", "noise", "perlin", "simplex"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+multiversion = { version = "0.7.4", package = "fmc_noise_multiversion"}
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "benchmark"
+harness = false
+
+#[profile.release]
+#debug=true
+
