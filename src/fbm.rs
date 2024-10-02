@@ -13,17 +13,17 @@ where
     let NoiseSettings::Fbm {
         octaves,
         gain,
-        scale,
+        scaled_amplitude,
     } = node.settings
     else {
         unreachable!()
     };
 
     let gain = Simd::splat(gain);
-    let mut amplitude = Simd::splat(scale);
+    let mut amplitude = Simd::splat(scaled_amplitude);
     let mut result = Simd::splat(0.0);
 
-    for _ in 0..(octaves) {
+    for _ in 0..octaves {
         let noise = pipeline.results.pop().unwrap();
         result += noise * amplitude;
         amplitude *= gain;

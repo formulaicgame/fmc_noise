@@ -20,7 +20,7 @@ mod range;
 mod simplex;
 mod square;
 
-// TODO: Make a cargo feature "f64", makes it compile to f64 instead of f32
+// TODO: Make a cargo feature "f64", makes it compile with f64 instead of f32
 //if cfg(f64)
 //type Float = f64;
 //type Int = i64;
@@ -28,8 +28,6 @@ mod square;
 //type Float = f32;
 //type Int = i32;
 
-// TODO: Find some way to make this Copy? You often use the same noise many places and clone makes
-// it noisy.
 #[derive(Clone, Debug)]
 pub struct Noise {
     pipeline: Vec<NoiseSettings>,
@@ -62,7 +60,7 @@ impl Noise {
 
     /// Fractal Brownian Motion (layered noise)
     pub fn fbm(mut self, octaves: u32, gain: f32, lacunarity: f32) -> Self {
-        assert!(octaves > 0, "There must 1 or more octaves");
+        assert!(octaves > 0, "There must be 1 or more octaves");
 
         // The amplitude gets pre scaled so that it can skip normalizing the result.
         // e.g. if the gain is 0.5 and there are 2 octaves, the amplitude would be 1 + 0.5 = 1.5
@@ -70,17 +68,17 @@ impl Noise {
         // 1/1.5 == 2/3 and so the second octave's amplitude becomes 2/3 * 0.5 = 1/3 and we end up
         // with a normalized result naturally.
         let mut amp = gain;
-        let mut scale = 1.0;
+        let mut scaled_amplitude = 1.0;
         for _ in 1..octaves {
-            scale += amp;
+            scaled_amplitude += amp;
             amp *= gain;
         }
-        scale = 1.0 / scale;
+        scaled_amplitude = 1.0 / scaled_amplitude;
 
-        // It's not possible to apply the lacunarity when executing since we don't know that the
-        // noise is included in fbm before we reach the fbm node in the pipeline. We then have to
-        // pre-apply the lacunarity to the frequency. The fbm adds the results of the noises from
-        // last to first, so lacunarity is also applied in that order. i.e first noise is the most
+        // It's not possible to apply the lacunarity when executing as we don't know that the
+        // noise is included in an fbm node before we reach it in the pipeline. Instead we have to
+        // pre-apply the lacunarity to the frequency. The fbm node adds the results of the noises from
+        // last to first, so lacunarity is also applied in that order. .i.e. the first noise is the most
         // lacunarized.
         let len = self.pipeline.len();
         for i in (1..octaves).rev() {
@@ -94,7 +92,7 @@ impl Noise {
                     frequency.z *= lacunarity;
                 }
                 NoiseSettings::Perlin { frequency, .. } => {
-                    let lacunarity = lacunarity.powi(i as i32);
+                    let lacunarity = lacunarity.powi(i as i32 - 1);
                     frequency.x *= lacunarity;
                     frequency.y *= lacunarity;
                     frequency.z *= lacunarity;
@@ -107,7 +105,7 @@ impl Noise {
         self.pipeline.push(NoiseSettings::Fbm {
             octaves,
             gain,
-            scale,
+            scaled_amplitude,
         });
         self
     }
@@ -121,7 +119,7 @@ impl Noise {
     /// Add two noises, the result is not normalized.
     pub fn add(mut self, mut other: Self) -> Self {
         self.pipeline.append(&mut other.pipeline);
-        self.pipeline.push(NoiseSettings::AddNoise);
+        self.pipeline.push(NoiseSettings::Add);
         self
     }
 
@@ -152,6 +150,7 @@ impl Noise {
         self
     }
 
+    /// Linearly interpolate between high and low using the input noise
     pub fn lerp(mut self, mut high: Self, mut low: Self) -> Self {
         self.pipeline.append(&mut high.pipeline);
         self.pipeline.append(&mut low.pipeline);
@@ -159,6 +158,9 @@ impl Noise {
         self
     }
 
+    /// Interpolate between the high and low noise. When the input noise is above 'high' it's
+    /// clamped to the high noise, and below 'low' to the low noise. When in-between, use the input
+    /// noise to linearly interpolate between them.
     pub fn range(mut self, high: f32, low: f32, mut high_noise: Self, mut low_noise: Self) -> Self {
         self.pipeline.append(&mut high_noise.pipeline);
         self.pipeline.append(&mut low_noise.pipeline);
@@ -166,19 +168,27 @@ impl Noise {
         self
     }
 
+    /// Square the noise
     pub fn square(mut self) -> Self {
         self.pipeline.push(NoiseSettings::Square);
         self
     }
 
+    /// Generates a line of noise. It also returns the min and max value generated.
     pub fn generate_1d(&self, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
         generate_1d(self, x, width)
     }
 
+    /// Generates a plane of noise. The result is a flat array that can be
+    /// indexed by x * X_WIDTH + z
+    /// It also returns the min and max value generated.
     pub fn generate_2d(&self, x: f32, y: f32, width: usize, height: usize) -> (Vec<f32>, f32, f32) {
         generate_2d(self, x, y, width, height)
     }
 
+    /// Generates a cube of noise. The result is a flat array that can be indexed
+    /// by x * X_WIDTH^2 + z * Z_WIDTH + y
+    /// It also returns the min and max value generated.
     pub fn generate_3d(
         &self,
         x: f32,
@@ -252,10 +262,10 @@ enum NoiseSettings {
         // previous one.
         gain: f32,
         // Automatically derived amplitude scaling factor.
-        scale: f32,
+        scaled_amplitude: f32,
     },
     Abs,
-    AddNoise,
+    Add,
     Mul,
     Clamp {
         min: f32,
@@ -277,8 +287,8 @@ where
     LaneCount<N>: SupportedLaneCount,
 {
     index: usize,
-    results: Vec<Simd<f32, N>>,
     pipeline: Vec<NoiseNode<N>>,
+    results: Vec<Simd<f32, N>>,
     x: Simd<f32, N>,
     y: Simd<f32, N>,
     z: Simd<f32, N>,
@@ -328,7 +338,7 @@ where
                 NoiseSettings::Constant { .. } => crate::constant::constant(),
                 NoiseSettings::Fbm { .. } => crate::fbm::fbm(),
                 NoiseSettings::Abs { .. } => crate::abs::abs(),
-                NoiseSettings::AddNoise { .. } => crate::add::add(),
+                NoiseSettings::Add { .. } => crate::add::add(),
                 NoiseSettings::Mul { .. } => crate::mul::mul(),
                 NoiseSettings::Clamp { .. } => crate::clamp::clamp(),
                 NoiseSettings::Max { .. } => crate::min_and_max::max(),
