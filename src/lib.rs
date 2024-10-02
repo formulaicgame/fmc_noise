@@ -4,6 +4,7 @@
 use std::simd::prelude::*;
 
 use multiversion::{multiversion, target::selected_target};
+use std::simd::{LaneCount, SupportedLaneCount};
 
 mod abs;
 mod add;
@@ -14,7 +15,6 @@ mod gradient;
 mod lerp;
 mod min_and_max;
 mod mul;
-mod noise_tree;
 mod perlin;
 mod range;
 mod simplex;
@@ -32,41 +32,41 @@ mod square;
 // it noisy.
 #[derive(Clone, Debug)]
 pub struct Noise {
-    settings: NoiseSettings,
+    settings: Box<NoiseSettings>,
 }
 
 impl Noise {
     pub fn simplex(frequency: f32, seed: i32) -> Self {
         return Self {
-            settings: NoiseSettings::Simplex {
+            settings: Box::new(NoiseSettings::Simplex {
                 seed,
                 frequency_x: frequency,
                 frequency_y: frequency,
                 frequency_z: frequency,
-            },
+            }),
         };
     }
 
     pub fn perlin(frequency: f32, seed: i32) -> Self {
         return Self {
-            settings: NoiseSettings::Perlin {
+            settings: Box::new(NoiseSettings::Perlin {
                 seed,
                 frequency_x: frequency,
                 frequency_y: frequency,
                 frequency_z: frequency,
-            },
+            }),
         };
     }
 
     pub fn constant(value: f32) -> Self {
         return Self {
-            settings: NoiseSettings::Constant { value },
+            settings: Box::new(NoiseSettings::Constant { value }),
         };
     }
 
     /// Set the frequency of the base noise.
     pub fn with_frequency(mut self, x: f32, y: f32, z: f32) -> Self {
-        match &mut self.settings {
+        match self.settings.as_mut() {
             NoiseSettings::Simplex {
                 frequency_x,
                 frequency_y,
@@ -97,114 +97,118 @@ impl Noise {
 
     /// Fractal Brownian Motion (layered noise)
     pub fn fbm(mut self, octaves: u32, gain: f32, lacunarity: f32) -> Self {
+        // The amplitude gets pre scaled so that it can skip normalizing the result.
+        // e.g. if the gain is 0.5 and there are 2 octaves, the amplitude would be 1 + 0.5 = 1.5
+        // after both octaves are combined normally. Instead, we set the initial amplitude to be
+        // 1/1.5 == 2/3 and so the second octave's amplitude becomes 2/3 * 0.5 = 1/3 and we end up
+        // with a normalized result naturally.
         let mut amp = gain;
         let mut scale = 1.0;
-
         for _ in 1..octaves {
             scale += amp;
             amp *= gain;
         }
         scale = 1.0 / scale;
 
-        self.settings = NoiseSettings::Fbm {
+        self.settings = Box::new(NoiseSettings::Fbm {
             octaves,
             gain,
             lacunarity,
             scale,
-            source: Box::new(self.settings),
-        };
+            source: self.settings,
+        });
         self
     }
 
     /// Convert the noise to absolute values.
     pub fn abs(mut self) -> Self {
-        self.settings = NoiseSettings::Abs {
-            source: Box::new(self.settings),
-        };
+        self.settings = Box::new(NoiseSettings::Abs {
+            source: self.settings,
+        });
         self
     }
 
     /// Add two noises together, the result is not normalized.
     pub fn add(mut self, other: Self) -> Self {
-        self.settings = NoiseSettings::AddNoise {
-            left: Box::new(self.settings),
-            right: Box::new(other.settings),
-        };
+        self.settings = Box::new(NoiseSettings::AddNoise {
+            left: self.settings,
+            right: other.settings,
+        });
         self
     }
 
     // TODO: Remove and replace with noise::constant, same for mul_value
     /// Add a value to the noise
     pub fn add_value(mut self, value: f32) -> Self {
-        self.settings = NoiseSettings::AddValue {
+        self.settings = Box::new(NoiseSettings::AddValue {
             value,
-            source: Box::new(self.settings),
-        };
+            source: self.settings,
+        });
         self
     }
 
     /// Clamp the noise values between min and max
     pub fn clamp(mut self, min: f32, max: f32) -> Self {
-        self.settings = NoiseSettings::Clamp {
+        self.settings = Box::new(NoiseSettings::Clamp {
             min,
             max,
-            source: Box::new(self.settings),
-        };
+            source: self.settings,
+        });
         self
     }
 
     /// Take the max value between the two noises
     pub fn max(mut self, other: Self) -> Self {
-        self.settings = NoiseSettings::Max {
-            left: Box::new(self.settings),
-            right: Box::new(other.settings),
-        };
+        self.settings = Box::new(NoiseSettings::Max {
+            left: self.settings,
+            right: other.settings,
+        });
         self
     }
 
     /// Take the min value between the two noises
     pub fn min(mut self, other: Self) -> Self {
-        self.settings = NoiseSettings::Min {
-            left: Box::new(self.settings),
-            right: Box::new(other.settings),
-        };
+        self.settings = Box::new(NoiseSettings::Min {
+            left: self.settings,
+            right: other.settings,
+        });
         self
     }
 
     // TODO: Convert to just 'mul' and take a noise
     /// Multiply the noise by a value.
     pub fn mul_value(mut self, value: f32) -> Self {
-        self.settings = NoiseSettings::MulValue {
+        self.settings = Box::new(NoiseSettings::MulValue {
             value,
-            source: Box::new(self.settings),
-        };
+            source: self.settings,
+        });
         self
     }
 
     pub fn lerp(mut self, high: Self, low: Self) -> Self {
-        self.settings = NoiseSettings::Lerp {
-            selector_source: Box::new(self.settings),
-            high_source: Box::new(high.settings),
-            low_source: Box::new(low.settings),
-        };
+        self.settings = Box::new(NoiseSettings::Lerp {
+            selector_source: self.settings,
+            high_source: high.settings,
+            low_source: low.settings,
+        });
         self
     }
 
     pub fn range(mut self, high: f32, low: f32, high_noise: Self, low_noise: Self) -> Self {
-        self.settings = NoiseSettings::Range {
+        self.settings = Box::new(NoiseSettings::Range {
             high,
             low,
-            selector_source: Box::new(self.settings),
-            high_source: Box::new(high_noise.settings),
-            low_source: Box::new(low_noise.settings),
-        };
+            selector_source: self.settings,
+            high_source: high_noise.settings,
+            low_source: low_noise.settings,
+        });
         self
     }
 
     pub fn square(mut self) -> Self {
-        self.settings = NoiseSettings::Square {
-            source: Box::new(self.settings),
-        };
+        self.settings = Box::new(NoiseSettings::Square {
+            source: self.settings,
+        });
         self
     }
 
@@ -228,6 +232,42 @@ impl Noise {
         generate_3d(self, x, y, z, width, height, depth)
     }
 }
+
+// pub struct Frequency {
+//     x: f32,
+//     y: f32,
+//     z: f32
+// }
+//
+// impl From<[f32; 3]> for Frequency {
+//     fn from(value: [f32; 3]) -> Self {
+//         Self {
+//             x: value[0],
+//             y: value[1],
+//             z: value[2],
+//         }
+//     }
+// }
+//
+// impl From<[f32; 2]> for Frequency {
+//     fn from(value: [f32; 2]) -> Self {
+//         Self {
+//             x: value[0],
+//             y: value[1],
+//             z: value[1],
+//         }
+//     }
+// }
+//
+// impl From<f32> for Frequency {
+//     fn from(value: f32) -> Self {
+//         Self {
+//             x: value,
+//             y: value,
+//             z: value,
+//         }
+//     }
+// }
 
 #[derive(Clone, Debug)]
 enum NoiseSettings {
@@ -307,6 +347,267 @@ enum NoiseSettings {
     },
 }
 
+#[derive(Debug)]
+pub(crate) enum NoiseNodeSettings<const N: usize>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    Simplex {
+        seed: i32,
+        frequency_x: f32,
+        frequency_y: f32,
+        frequency_z: f32,
+    },
+    Perlin {
+        seed: i32,
+        frequency_x: f32,
+        frequency_y: f32,
+        frequency_z: f32,
+    },
+    Constant {
+        value: f32,
+    },
+    Fbm {
+        octaves: u32,
+        gain: f32,
+        lacunarity: f32,
+        scale: f32,
+        source: Box<NoiseNode<N>>,
+    },
+    Abs {
+        source: Box<NoiseNode<N>>,
+    },
+    AddNoise {
+        left_source: Box<NoiseNode<N>>,
+        right_source: Box<NoiseNode<N>>,
+    },
+    AddValue {
+        value: f32,
+        source: Box<NoiseNode<N>>,
+    },
+    Clamp {
+        min: f32,
+        max: f32,
+        source: Box<NoiseNode<N>>,
+    },
+    MaxNoise {
+        left_source: Box<NoiseNode<N>>,
+        right_source: Box<NoiseNode<N>>,
+    },
+    MinNoise {
+        left_source: Box<NoiseNode<N>>,
+        right_source: Box<NoiseNode<N>>,
+    },
+    MulValue {
+        value: f32,
+        source: Box<NoiseNode<N>>,
+    },
+    Lerp {
+        selector: Box<NoiseNode<N>>,
+        low_source: Box<NoiseNode<N>>,
+        high_source: Box<NoiseNode<N>>,
+    },
+    Range {
+        low: f32,
+        high: f32,
+        selector: Box<NoiseNode<N>>,
+        low_source: Box<NoiseNode<N>>,
+        high_source: Box<NoiseNode<N>>,
+    },
+    Square {
+        source: Box<NoiseNode<N>>,
+    },
+}
+
+#[derive(Debug)]
+pub(crate) struct NoiseNode<const N: usize>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    pub settings: NoiseNodeSettings<N>,
+    pub function_1d: unsafe fn(node: &NoiseNode<N>, x: Simd<f32, N>) -> Simd<f32, N>,
+    pub function_2d:
+        unsafe fn(node: &NoiseNode<N>, x: Simd<f32, N>, y: Simd<f32, N>) -> Simd<f32, N>,
+    pub function_3d: unsafe fn(
+        node: &NoiseNode<N>,
+        x: Simd<f32, N>,
+        y: Simd<f32, N>,
+        z: Simd<f32, N>,
+    ) -> Simd<f32, N>,
+}
+
+// TODO: Nesting pointers has the same performance on my system with the benefit of reducing code
+// complexity. Feels like it will suddenly break down if the cpu doesn't have good branch
+// prediction. Test on old computer.
+impl<const N: usize> From<&Box<NoiseSettings>> for NoiseNode<N>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    fn from(value: &Box<NoiseSettings>) -> Self {
+        match value.as_ref() {
+            NoiseSettings::Simplex {
+                seed,
+                frequency_x,
+                frequency_y,
+                frequency_z,
+            } => Self {
+                settings: NoiseNodeSettings::Simplex {
+                    seed: *seed,
+                    frequency_x: *frequency_x,
+                    frequency_y: *frequency_y,
+                    frequency_z: *frequency_z,
+                },
+                function_1d: crate::simplex::simplex_1d(),
+                function_2d: crate::simplex::simplex_2d(),
+                function_3d: crate::simplex::simplex_3d(),
+            },
+            NoiseSettings::Perlin {
+                seed,
+                frequency_x,
+                frequency_y,
+                frequency_z,
+            } => Self {
+                settings: NoiseNodeSettings::Perlin {
+                    seed: *seed,
+                    frequency_x: *frequency_x,
+                    frequency_y: *frequency_y,
+                    frequency_z: *frequency_z,
+                },
+                function_1d: crate::simplex::simplex_1d(),
+                function_2d: crate::perlin::perlin_2d(),
+                function_3d: crate::perlin::perlin_3d(),
+            },
+            NoiseSettings::Constant { value } => Self {
+                settings: NoiseNodeSettings::Constant { value: *value },
+                function_1d: crate::constant::constant_1d(),
+                function_2d: crate::constant::constant_2d(),
+                function_3d: crate::constant::constant_3d(),
+            },
+            NoiseSettings::Fbm {
+                octaves,
+                gain,
+                lacunarity,
+                scale,
+                source,
+            } => Self {
+                settings: NoiseNodeSettings::Fbm {
+                    octaves: *octaves,
+                    gain: *gain,
+                    lacunarity: *lacunarity,
+                    scale: *scale,
+                    source: Box::new(Self::from(source)),
+                },
+                function_1d: crate::fbm::fbm_1d(),
+                function_2d: crate::fbm::fbm_2d(),
+                function_3d: crate::fbm::fbm_3d(),
+            },
+            NoiseSettings::Abs { source } => Self {
+                settings: NoiseNodeSettings::Abs {
+                    source: Box::new(Self::from(source)),
+                },
+                function_1d: crate::abs::abs_1d(),
+                function_2d: crate::abs::abs_2d(),
+                function_3d: crate::abs::abs_3d(),
+            },
+            NoiseSettings::AddNoise { left, right } => Self {
+                settings: NoiseNodeSettings::AddNoise {
+                    left_source: Box::new(Self::from(left)),
+                    right_source: Box::new(Self::from(right)),
+                },
+                function_1d: crate::add::add_1d(),
+                function_2d: crate::add::add_2d(),
+                function_3d: crate::add::add_3d(),
+            },
+            NoiseSettings::AddValue { value, source } => Self {
+                settings: NoiseNodeSettings::AddValue {
+                    value: *value,
+                    source: Box::new(Self::from(source)),
+                },
+                function_1d: crate::add::add_value_1d(),
+                function_2d: crate::add::add_value_2d(),
+                function_3d: crate::add::add_value_3d(),
+            },
+            NoiseSettings::Clamp { min, max, source } => Self {
+                settings: NoiseNodeSettings::Clamp {
+                    min: *min,
+                    max: *max,
+                    source: Box::new(Self::from(source)),
+                },
+                function_1d: crate::clamp::clamp_1d(),
+                function_2d: crate::clamp::clamp_2d(),
+                function_3d: crate::clamp::clamp_3d(),
+            },
+            NoiseSettings::Max { left, right } => Self {
+                settings: NoiseNodeSettings::MaxNoise {
+                    left_source: Box::new(Self::from(left)),
+                    right_source: Box::new(Self::from(right)),
+                },
+                function_1d: crate::min_and_max::max_1d(),
+                function_2d: crate::min_and_max::max_2d(),
+                function_3d: crate::min_and_max::max_3d(),
+            },
+            NoiseSettings::Min { left, right } => Self {
+                settings: NoiseNodeSettings::MinNoise {
+                    left_source: Box::new(Self::from(left)),
+                    right_source: Box::new(Self::from(right)),
+                },
+                function_1d: crate::min_and_max::min_1d(),
+                function_2d: crate::min_and_max::min_2d(),
+                function_3d: crate::min_and_max::min_3d(),
+            },
+            NoiseSettings::MulValue { value, source } => Self {
+                settings: NoiseNodeSettings::MulValue {
+                    value: *value,
+                    source: Box::new(Self::from(source)),
+                },
+                function_1d: crate::mul::mul_value_1d(),
+                function_2d: crate::mul::mul_value_2d(),
+                function_3d: crate::mul::mul_value_3d(),
+            },
+            NoiseSettings::Lerp {
+                selector_source,
+                low_source,
+                high_source,
+            } => NoiseNode {
+                settings: NoiseNodeSettings::Lerp {
+                    selector: Box::new(Self::from(selector_source)),
+                    low_source: Box::new(Self::from(low_source)),
+                    high_source: Box::new(Self::from(high_source)),
+                },
+                function_1d: crate::lerp::lerp_1d(),
+                function_2d: crate::lerp::lerp_2d(),
+                function_3d: crate::lerp::lerp_3d(),
+            },
+            NoiseSettings::Range {
+                high,
+                low,
+                selector_source,
+                high_source,
+                low_source,
+            } => NoiseNode {
+                settings: NoiseNodeSettings::Range {
+                    low: *low,
+                    high: *high,
+                    selector: Box::new(Self::from(selector_source)),
+                    low_source: Box::new(Self::from(low_source)),
+                    high_source: Box::new(Self::from(high_source)),
+                },
+                function_1d: crate::range::range_1d(),
+                function_2d: crate::range::range_2d(),
+                function_3d: crate::range::range_3d(),
+            },
+            NoiseSettings::Square { source } => Self {
+                settings: NoiseNodeSettings::Square {
+                    source: Box::new(Self::from(source)),
+                },
+                function_1d: crate::square::square_1d(),
+                function_2d: crate::square::square_2d(),
+                function_3d: crate::square::square_3d(),
+            },
+        }
+    }
+}
+
 #[multiversion(targets = "simd")]
 fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
     const N: usize = if let Some(size) = selected_target!().suggested_simd_width::<f32>() {
@@ -315,7 +616,7 @@ fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
         1
     };
 
-    let tree = noise_tree::NoiseTree::<N>::new(noise);
+    let noise_node = NoiseNode::<N>::from(&noise.settings);
 
     let start_x = x;
 
@@ -341,7 +642,7 @@ fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
     let mut i = 0;
     let mut x = Simd::from_slice(&x_arr);
     for _ in 0..width / vector_width {
-        let f = unsafe { (tree.nodes[0].function_1d)(&tree, &tree.nodes[0], x) };
+        let f = unsafe { (noise_node.function_1d)(&noise_node, x) };
         max_s = max_s.simd_max(f);
         min_s = min_s.simd_min(f);
         f.copy_to_slice(&mut result[i..]);
@@ -349,7 +650,7 @@ fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
         x += Simd::splat(vector_width as f32);
     }
     if remainder != 0 {
-        let f = unsafe { (tree.nodes[0].function_1d)(&tree, &tree.nodes[0], x) };
+        let f = unsafe { (noise_node.function_1d)(&noise_node, x) };
         for j in 0..remainder {
             let n = f[j];
             unsafe {
@@ -383,7 +684,7 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
         1
     };
 
-    let tree = noise_tree::NoiseTree::<N>::new(noise);
+    let noise_node = NoiseNode::<N>::from(&noise.settings);
     let start_x = y;
     let start_y = x;
 
@@ -410,7 +711,7 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
     for _ in 0..height {
         let mut x = Simd::from_slice(&x_arr);
         for _ in 0..width / vector_width {
-            let f = unsafe { (tree.nodes[0].function_2d)(&tree, &tree.nodes[0], x, y) };
+            let f = unsafe { (noise_node.function_2d)(&noise_node, x, y) };
             max_s = max_s.simd_max(f);
             min_s = min_s.simd_min(f);
             f.copy_to_slice(&mut result[i..]);
@@ -418,7 +719,7 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
             x += Simd::splat(vector_width as f32);
         }
         if remainder != 0 {
-            let f = unsafe { (tree.nodes[0].function_2d)(&tree, &tree.nodes[0], x, y) };
+            let f = unsafe { (noise_node.function_2d)(&noise_node, x, y) };
             for j in 0..remainder {
                 let n = f[j];
                 unsafe {
@@ -461,7 +762,7 @@ fn generate_3d(
     } else {
         1
     };
-    let tree = noise_tree::NoiseTree::<N>::new(noise);
+    let noise_node = NoiseNode::<N>::from(&noise.settings);
 
     let start_x = x;
     let start_y = y;
@@ -496,7 +797,7 @@ fn generate_3d(
         for _ in 0..depth {
             let mut y = Simd::from_slice(&y_arr);
             for _ in 0..height / vector_width {
-                let f = unsafe { (tree.nodes[0].function_3d)(&tree, &tree.nodes[0], x, y, z) };
+                let f = unsafe { (noise_node.function_3d)(&noise_node, x, y, z) };
                 max_s = max_s.simd_max(f);
                 min_s = min_s.simd_min(f);
                 f.copy_to_slice(&mut result[i..]);
@@ -504,7 +805,7 @@ fn generate_3d(
                 y = y + Simd::splat(vector_width as f32);
             }
             if remainder != 0 {
-                let f = unsafe { (tree.nodes[0].function_3d)(&tree, &tree.nodes[0], x, y, z) };
+                let f = unsafe { (noise_node.function_3d)(&noise_node, x, y, z) };
                 for j in 0..remainder {
                     let n = f[j];
                     unsafe {

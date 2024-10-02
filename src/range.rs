@@ -2,14 +2,10 @@ use std::simd::{prelude::*, LaneCount, Simd, StdFloat, SupportedLaneCount};
 
 use multiversion::multiversion;
 
-use crate::noise_tree::{NoiseNode, NoiseNodeSettings, NoiseTree};
+use crate::{NoiseNode, NoiseNodeSettings};
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn range_1d<const N: usize>(
-    tree: &NoiseTree<N>,
-    node: &NoiseNode<N>,
-    x: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn range_1d<const N: usize>(node: &NoiseNode<N>, x: Simd<f32, N>) -> Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
@@ -26,14 +22,11 @@ where
 
     let high = Simd::splat(*high);
     let low = Simd::splat(*low);
-    let selector = &tree.nodes[*selector];
-    let low_node = &tree.nodes[*low_source];
-    let high_node = &tree.nodes[*high_source];
 
     unsafe {
-        let selection_noise = (selector.function_1d)(tree, &selector, x);
-        let low_noise = (low_node.function_1d)(tree, &low_node, x);
-        let high_noise = (high_node.function_1d)(tree, &high_node, x);
+        let selection_noise = (selector.function_1d)(&selector, x);
+        let low_noise = (low_source.function_1d)(&low_source, x);
+        let high_noise = (high_source.function_1d)(&high_source, x);
 
         let high_clipped = selection_noise.simd_gt(high);
         let low_clipped = selection_noise.simd_lt(low);
@@ -49,7 +42,6 @@ where
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn range_2d<const N: usize>(
-    tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     x: Simd<f32, N>,
     y: Simd<f32, N>,
@@ -70,14 +62,11 @@ where
 
     let high = Simd::splat(*high);
     let low = Simd::splat(*low);
-    let selector = &tree.nodes[*selector];
-    let low_node = &tree.nodes[*low_source];
-    let high_node = &tree.nodes[*high_source];
 
     unsafe {
-        let selection_noise = (selector.function_2d)(tree, &selector, x, y);
-        let low_noise = (low_node.function_2d)(tree, &low_node, x, y);
-        let high_noise = (high_node.function_2d)(tree, &high_node, x, y);
+        let selection_noise = (selector.function_2d)(&selector, x, y);
+        let low_noise = (low_source.function_2d)(&low_source, x, y);
+        let high_noise = (high_source.function_2d)(&high_source, x, y);
 
         let high_clipped = selection_noise.simd_gt(high);
         let low_clipped = selection_noise.simd_lt(low);
@@ -93,7 +82,6 @@ where
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn range_3d<const N: usize>(
-    tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     x: Simd<f32, N>,
     y: Simd<f32, N>,
@@ -115,14 +103,11 @@ where
 
     let high = Simd::splat(*high);
     let low = Simd::splat(*low);
-    let selector = &tree.nodes[*selector];
-    let low_node = &tree.nodes[*low_source];
-    let high_node = &tree.nodes[*high_source];
 
     unsafe {
-        let selection_noise = (selector.function_3d)(tree, &selector, x, y, z);
-        let low_noise = (low_node.function_3d)(tree, &low_node, x, y, z);
-        let high_noise = (high_node.function_3d)(tree, &high_node, x, y, z);
+        let selection_noise = (selector.function_3d)(&selector, x, y, z);
+        let low_noise = (low_source.function_3d)(&low_source, x, y, z);
+        let high_noise = (high_source.function_3d)(&high_source, x, y, z);
 
         let high_clipped = selection_noise.simd_gt(high);
         let low_clipped = selection_noise.simd_lt(low);

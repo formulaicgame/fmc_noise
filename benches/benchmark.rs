@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use noise::Noise;
+use fmc_noise::Noise;
 //use simdnoise::{avx2, sse2};
 
 fn d1(c: &mut Criterion) {
@@ -70,12 +70,6 @@ fn fbm_3d(c: &mut Criterion) {
         b.iter(|| noise.generate_3d(0.0, 0.0, 0.0, 16, 16, 16))
     });
 
-    //let setting = simdnoise::NoiseBuilder::fbm_3d(16, 16, 16)
-    //    .with_octaves(3)
-    //    .wrap();
-    //group.bench_function("simdnoise", move |b| {
-    //    b.iter(|| unsafe { avx2::get_3d_noise(&setting) })
-    //});
     group
         .sample_size(10)
         .warm_up_time(std::time::Duration::from_millis(1))
@@ -98,6 +92,6 @@ fn add_3d(c: &mut Criterion) {
         .measurement_time(std::time::Duration::from_secs(5));
 }
 
-//criterion_group!(benches, d1, d2, d3, fbm_3d, add_3d);
-criterion_group!(benches, fbm_3d);
+criterion_group!(benches, d1, d2, d3, fbm_3d, add_3d);
+//criterion_group!(benches, fbm_3d);
 criterion_main!(benches);

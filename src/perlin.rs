@@ -7,7 +7,7 @@ use crate::gradient::grad3d_dot;
 use crate::gradient::hash2d;
 use crate::gradient::hash3d;
 use crate::gradient::{grad1, grad2};
-use crate::noise_tree::{NoiseNode, NoiseNodeSettings, NoiseTree};
+use crate::{NoiseNode, NoiseNodeSettings};
 
 pub const X_PRIME: i32 = 501125321;
 pub const Y_PRIME: i32 = 1136930381;
@@ -15,7 +15,6 @@ pub const Z_PRIME: i32 = 1720413743;
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn perlin_2d<const N: usize>(
-    _tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     mut x: Simd<f32, N>,
     mut y: Simd<f32, N>,
@@ -73,7 +72,6 @@ where
 }
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn perlin_3d<const N: usize>(
-    _tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     mut x: Simd<f32, N>,
     mut y: Simd<f32, N>,

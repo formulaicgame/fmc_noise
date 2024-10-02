@@ -2,14 +2,10 @@ use std::simd::{LaneCount, Simd, SupportedLaneCount};
 
 use multiversion::multiversion;
 
-use crate::noise_tree::{NoiseNode, NoiseNodeSettings, NoiseTree};
+use crate::{NoiseNode, NoiseNodeSettings};
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn constant_1d<const N: usize>(
-    _tree: &NoiseTree<N>,
-    node: &NoiseNode<N>,
-    _x: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn constant_1d<const N: usize>(node: &NoiseNode<N>, _x: Simd<f32, N>) -> Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
@@ -22,7 +18,6 @@ where
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn constant_2d<const N: usize>(
-    _tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     _x: Simd<f32, N>,
     _y: Simd<f32, N>,
@@ -39,7 +34,6 @@ where
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn constant_3d<const N: usize>(
-    _tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     _x: Simd<f32, N>,
     _y: Simd<f32, N>,

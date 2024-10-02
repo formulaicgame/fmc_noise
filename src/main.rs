@@ -1,4 +1,4 @@
-use fmc_noise::Noise;
+//use fmc_noise::Noise;
 
 //use plotly::{color::Rgb, image::ColorModel, Image, Plot};
 
@@ -6,8 +6,8 @@ fn main() {
     //let (noise, min, max) = Noise::simplex(1.0, 0).fbm(16, 20000.0, 0.5).generate_1d(0.0, 1000000);
     //dbg!(noise);
     //let (noise, min, max) = Noise::simplex(0.01, 0).fbm(6, 0.5, 2.0).generate_2d(0.0, 0.0, 1000, 1000);
-    let (noise, min, max) = Noise::perlin(0.001, 0).generate_2d(9234.0, 100.0, 10000, 10000);
-    dbg!(min, max);
+    // let (noise, min, max) = Noise::perlin(0.001, 0).generate_2d(9234.0, 100.0, 10000, 10000);
+    // dbg!(min, max);
 }
 
 //fn main() {

@@ -7,7 +7,7 @@ use crate::gradient::grad3d_dot;
 use crate::gradient::hash2d;
 use crate::gradient::hash3d;
 use crate::gradient::{grad1, grad2};
-use crate::noise_tree::{NoiseNode, NoiseNodeSettings, NoiseTree};
+use crate::{NoiseNode, NoiseNodeSettings};
 
 pub const X_PRIME: i32 = 501125321;
 pub const Y_PRIME: i32 = 1136930381;
@@ -47,11 +47,7 @@ const PERM: [i32; 512] = [
 ///
 /// Produces a value -1 ≤ n ≤ 1.
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_1d<const N: usize>(
-    _tree: &NoiseTree<N>,
-    node: &NoiseNode<N>,
-    mut x: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn simplex_1d<const N: usize>(node: &NoiseNode<N>, mut x: Simd<f32, N>) -> Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
@@ -124,7 +120,6 @@ where
 /// Produces a value -1 ≤ n ≤ 1.
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn simplex_2d<const N: usize>(
-    _tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     mut x: Simd<f32, N>,
     mut y: Simd<f32, N>,
@@ -197,7 +192,6 @@ where
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn simplex_3d<const N: usize>(
-    _tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     mut x: Simd<f32, N>,
     mut y: Simd<f32, N>,

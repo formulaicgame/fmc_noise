@@ -2,14 +2,10 @@ use std::simd::{prelude::*, LaneCount, Simd, SupportedLaneCount};
 
 use multiversion::multiversion;
 
-use crate::noise_tree::{NoiseNode, NoiseNodeSettings, NoiseTree};
+use crate::{NoiseNode, NoiseNodeSettings};
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn clamp_1d<const N: usize>(
-    tree: &NoiseTree<N>,
-    node: &NoiseNode<N>,
-    x: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn clamp_1d<const N: usize>(node: &NoiseNode<N>, x: Simd<f32, N>) -> Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
@@ -17,16 +13,13 @@ where
         unreachable!()
     };
 
-    let source = &tree.nodes[*source];
     unsafe {
-        return (source.function_1d)(tree, &source, x)
-            .simd_clamp(Simd::splat(*min), Simd::splat(*max));
+        return (source.function_1d)(&source, x).simd_clamp(Simd::splat(*min), Simd::splat(*max));
     }
 }
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn clamp_2d<const N: usize>(
-    tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     x: Simd<f32, N>,
     y: Simd<f32, N>,
@@ -38,16 +31,14 @@ where
         unreachable!()
     };
 
-    let source = &tree.nodes[*source];
     unsafe {
-        return (source.function_2d)(tree, &source, x, y)
+        return (source.function_2d)(&source, x, y)
             .simd_clamp(Simd::splat(*min), Simd::splat(*max));
     }
 }
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
 pub fn clamp_3d<const N: usize>(
-    tree: &NoiseTree<N>,
     node: &NoiseNode<N>,
     x: Simd<f32, N>,
     y: Simd<f32, N>,
@@ -60,9 +51,8 @@ where
         unreachable!()
     };
 
-    let source = &tree.nodes[*source];
     unsafe {
-        return (source.function_3d)(tree, &source, x, y, z)
+        return (source.function_3d)(&source, x, y, z)
             .simd_clamp(Simd::splat(*min), Simd::splat(*max));
     }
 }
