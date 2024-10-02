@@ -23,10 +23,7 @@ where
     LaneCount<N>: SupportedLaneCount,
 {
     let NoiseNodeSettings::Perlin {
-        seed,
-        frequency_x,
-        frequency_z,
-        ..
+        seed, frequency, ..
     } = node.settings
     else {
         unreachable!()
@@ -34,8 +31,8 @@ where
 
     let seed = Simd::splat(seed);
 
-    x *= Simd::splat(frequency_x);
-    y *= Simd::splat(frequency_z);
+    x *= Simd::splat(frequency.x);
+    y *= Simd::splat(frequency.z);
 
     let mut xs = x.floor();
     let mut ys = y.floor();
@@ -80,21 +77,15 @@ pub fn perlin_3d<const N: usize>(
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    let NoiseNodeSettings::Perlin {
-        seed,
-        frequency_x,
-        frequency_y,
-        frequency_z,
-    } = node.settings
-    else {
+    let NoiseNodeSettings::Perlin { seed, frequency } = node.settings else {
         unreachable!()
     };
 
     let seed = Simd::splat(seed);
 
-    x *= Simd::splat(frequency_x);
-    y *= Simd::splat(frequency_y);
-    z *= Simd::splat(frequency_z);
+    x *= Simd::splat(frequency.x);
+    y *= Simd::splat(frequency.y);
+    z *= Simd::splat(frequency.z);
 
     let mut xs = x.floor();
     let mut ys = y.floor();

@@ -36,24 +36,20 @@ pub struct Noise {
 }
 
 impl Noise {
-    pub fn simplex(frequency: f32, seed: i32) -> Self {
+    pub fn simplex(frequency: impl Into<Frequency>, seed: i32) -> Self {
         return Self {
             settings: Box::new(NoiseSettings::Simplex {
                 seed,
-                frequency_x: frequency,
-                frequency_y: frequency,
-                frequency_z: frequency,
+                frequency: frequency.into(),
             }),
         };
     }
 
-    pub fn perlin(frequency: f32, seed: i32) -> Self {
+    pub fn perlin(frequency: impl Into<Frequency>, seed: i32) -> Self {
         return Self {
             settings: Box::new(NoiseSettings::Perlin {
                 seed,
-                frequency_x: frequency,
-                frequency_y: frequency,
-                frequency_z: frequency,
+                frequency: frequency.into(),
             }),
         };
     }
@@ -62,37 +58,6 @@ impl Noise {
         return Self {
             settings: Box::new(NoiseSettings::Constant { value }),
         };
-    }
-
-    /// Set the frequency of the base noise.
-    pub fn with_frequency(mut self, x: f32, y: f32, z: f32) -> Self {
-        match self.settings.as_mut() {
-            NoiseSettings::Simplex {
-                frequency_x,
-                frequency_y,
-                frequency_z,
-                ..
-            } => {
-                *frequency_x = x;
-                *frequency_y = y;
-                *frequency_z = z;
-            }
-            NoiseSettings::Perlin {
-                frequency_x,
-                frequency_y,
-                frequency_z,
-                ..
-            } => {
-                *frequency_x = x;
-                *frequency_y = y;
-                *frequency_z = z;
-            }
-            _ => {
-                // TODO: Recursively call and change the frequency for all noises?
-                panic!("Frequency can only be changed when no other steps have been added.")
-            }
-        }
-        self
     }
 
     /// Fractal Brownian Motion (layered noise)
@@ -233,55 +198,52 @@ impl Noise {
     }
 }
 
-// pub struct Frequency {
-//     x: f32,
-//     y: f32,
-//     z: f32
-// }
-//
-// impl From<[f32; 3]> for Frequency {
-//     fn from(value: [f32; 3]) -> Self {
-//         Self {
-//             x: value[0],
-//             y: value[1],
-//             z: value[2],
-//         }
-//     }
-// }
-//
-// impl From<[f32; 2]> for Frequency {
-//     fn from(value: [f32; 2]) -> Self {
-//         Self {
-//             x: value[0],
-//             y: value[1],
-//             z: value[1],
-//         }
-//     }
-// }
-//
-// impl From<f32> for Frequency {
-//     fn from(value: f32) -> Self {
-//         Self {
-//             x: value,
-//             y: value,
-//             z: value,
-//         }
-//     }
-// }
+#[derive(Clone, Copy, Debug)]
+struct Frequency {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+impl From<[f32; 3]> for Frequency {
+    fn from(value: [f32; 3]) -> Self {
+        Self {
+            x: value[0],
+            y: value[1],
+            z: value[2],
+        }
+    }
+}
+
+impl From<[f32; 2]> for Frequency {
+    fn from(value: [f32; 2]) -> Self {
+        Self {
+            x: value[0],
+            y: value[1],
+            z: value[1],
+        }
+    }
+}
+
+impl From<f32> for Frequency {
+    fn from(value: f32) -> Self {
+        Self {
+            x: value,
+            y: value,
+            z: value,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 enum NoiseSettings {
     Simplex {
         seed: i32,
-        frequency_x: f32,
-        frequency_y: f32,
-        frequency_z: f32,
+        frequency: Frequency,
     },
     Perlin {
         seed: i32,
-        frequency_x: f32,
-        frequency_y: f32,
-        frequency_z: f32,
+        frequency: Frequency,
     },
     Constant {
         value: f32,
@@ -354,15 +316,11 @@ where
 {
     Simplex {
         seed: i32,
-        frequency_x: f32,
-        frequency_y: f32,
-        frequency_z: f32,
+        frequency: Frequency,
     },
     Perlin {
         seed: i32,
-        frequency_x: f32,
-        frequency_y: f32,
-        frequency_z: f32,
+        frequency: Frequency,
     },
     Constant {
         value: f32,
@@ -436,42 +394,25 @@ where
     ) -> Simd<f32, N>,
 }
 
-// TODO: Nesting pointers has the same performance on my system with the benefit of reducing code
-// complexity. Feels like it will suddenly break down if the cpu doesn't have good branch
-// prediction. Test on old computer.
 impl<const N: usize> From<&Box<NoiseSettings>> for NoiseNode<N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
     fn from(value: &Box<NoiseSettings>) -> Self {
         match value.as_ref() {
-            NoiseSettings::Simplex {
-                seed,
-                frequency_x,
-                frequency_y,
-                frequency_z,
-            } => Self {
+            NoiseSettings::Simplex { seed, frequency } => Self {
                 settings: NoiseNodeSettings::Simplex {
                     seed: *seed,
-                    frequency_x: *frequency_x,
-                    frequency_y: *frequency_y,
-                    frequency_z: *frequency_z,
+                    frequency: *frequency,
                 },
                 function_1d: crate::simplex::simplex_1d(),
                 function_2d: crate::simplex::simplex_2d(),
                 function_3d: crate::simplex::simplex_3d(),
             },
-            NoiseSettings::Perlin {
-                seed,
-                frequency_x,
-                frequency_y,
-                frequency_z,
-            } => Self {
+            NoiseSettings::Perlin { seed, frequency } => Self {
                 settings: NoiseNodeSettings::Perlin {
                     seed: *seed,
-                    frequency_x: *frequency_x,
-                    frequency_y: *frequency_y,
-                    frequency_z: *frequency_z,
+                    frequency: *frequency,
                 },
                 function_1d: crate::simplex::simplex_1d(),
                 function_2d: crate::perlin::perlin_2d(),

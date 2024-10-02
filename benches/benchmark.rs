@@ -56,12 +56,8 @@ fn fbm_3d(c: &mut Criterion) {
     let mut group = c.benchmark_group("fbm_3d");
 
     let freq = 1.0 / 2.0f32.powi(8);
-    let high = Noise::perlin(freq, 2)
-        .with_frequency(freq, freq, freq)
-        .fbm(4, 0.5, 2.0);
-    let low = Noise::perlin(freq, 3)
-        .with_frequency(freq, freq, freq)
-        .fbm(4, 0.5, 2.0);
+    let high = Noise::perlin(freq, 2).fbm(4, 0.5, 2.0);
+    let low = Noise::perlin(freq, 3).fbm(4, 0.5, 2.0);
     let noise = Noise::perlin(0.01, 0)
         .fbm(8, 0.5, 2.0)
         .range(0.1, -0.1, high, low)

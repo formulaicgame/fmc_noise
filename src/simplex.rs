@@ -52,13 +52,13 @@ where
     LaneCount<N>: SupportedLaneCount,
 {
     let NoiseNodeSettings::Simplex {
-        seed, frequency_x, ..
+        seed, frequency, ..
     } = node.settings
     else {
         unreachable!()
     };
     let seed = Simd::splat(seed);
-    let freq = Simd::splat(frequency_x);
+    let freq = Simd::splat(frequency.x);
     x *= freq;
 
     // Gradients are selected deterministically based on the whole part of `x`
@@ -132,17 +132,14 @@ where
     const G2: f32 = (3.0 - SQRT3) / 6.0;
 
     let NoiseNodeSettings::Simplex {
-        seed,
-        frequency_x,
-        frequency_z,
-        ..
+        seed, frequency, ..
     } = node.settings
     else {
         unreachable!()
     };
     let seed = Simd::splat(seed);
-    x *= Simd::splat(frequency_x);
-    y *= Simd::splat(frequency_z);
+    x *= Simd::splat(frequency.x);
+    y *= Simd::splat(frequency.z);
 
     let f = Simd::splat(F2) * (x + y);
     let mut x0 = (x + f).floor();
@@ -203,21 +200,15 @@ where
     const F3: f32 = 1.0 / 3.0;
     const G3: f32 = 1.0 / 2.0;
 
-    let NoiseNodeSettings::Simplex {
-        seed,
-        frequency_x,
-        frequency_y,
-        frequency_z,
-    } = node.settings
-    else {
+    let NoiseNodeSettings::Simplex { seed, frequency } = node.settings else {
         unreachable!()
     };
 
     let seed = Simd::splat(seed);
 
-    x *= Simd::splat(frequency_x);
-    y *= Simd::splat(frequency_y);
-    z *= Simd::splat(frequency_z);
+    x *= Simd::splat(frequency.x);
+    y *= Simd::splat(frequency.y);
+    z *= Simd::splat(frequency.z);
 
     let s = Simd::splat(F3) * (x + y + z);
     x += s;
