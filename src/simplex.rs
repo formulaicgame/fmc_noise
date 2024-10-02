@@ -7,7 +7,7 @@ use crate::gradient::grad3d_dot;
 use crate::gradient::hash2d;
 use crate::gradient::hash3d;
 use crate::gradient::{grad1, grad2};
-use crate::{NoiseNode, NoiseNodeSettings};
+use crate::{NoisePipeline, NoiseSettings};
 
 pub const X_PRIME: i32 = 501125321;
 pub const Y_PRIME: i32 = 1136930381;
@@ -47,19 +47,22 @@ const PERM: [i32; 512] = [
 ///
 /// Produces a value -1 ≤ n ≤ 1.
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_1d<const N: usize>(node: &NoiseNode<N>, mut x: Simd<f32, N>) -> Simd<f32, N>
+pub fn simplex_1d<const N: usize>(pipeline: &mut NoisePipeline<N>)
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    let NoiseNodeSettings::Simplex {
+    let node = pipeline.current_node();
+
+    let NoiseSettings::Simplex {
         seed, frequency, ..
     } = node.settings
     else {
         unreachable!()
     };
+
     let seed = Simd::splat(seed);
     let freq = Simd::splat(frequency.x);
-    x *= freq;
+    let x = pipeline.x * freq;
 
     // Gradients are selected deterministically based on the whole part of `x`
     let ips = x.floor();
@@ -112,18 +115,15 @@ where
     //    + t40 * gx0
     //    + t41 * gx1)
     //    * Simd::splat(SCALE);
-    value
+    pipeline.results.push(value);
+    pipeline.next();
 }
 
 /// Samples 2-dimensional simplex noise
 ///
 /// Produces a value -1 ≤ n ≤ 1.
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_2d<const N: usize>(
-    node: &NoiseNode<N>,
-    mut x: Simd<f32, N>,
-    mut y: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn simplex_2d<const N: usize>(pipeline: &mut NoisePipeline<N>)
 where
     LaneCount<N>: SupportedLaneCount,
 {
@@ -131,15 +131,18 @@ where
     const F2: f32 = 0.5 * (SQRT3 - 1.0);
     const G2: f32 = (3.0 - SQRT3) / 6.0;
 
-    let NoiseNodeSettings::Simplex {
+    let node = pipeline.current_node();
+
+    let NoiseSettings::Simplex {
         seed, frequency, ..
     } = node.settings
     else {
         unreachable!()
     };
+
     let seed = Simd::splat(seed);
-    x *= Simd::splat(frequency.x);
-    y *= Simd::splat(frequency.z);
+    let x = pipeline.x * Simd::splat(frequency.x);
+    let y = pipeline.y * Simd::splat(frequency.z);
 
     let f = Simd::splat(F2) * (x + y);
     let mut x0 = (x + f).floor();
@@ -184,31 +187,30 @@ where
     let j2 = j + Simd::splat(Y_PRIME);
     let n2 = grad2(hash2d(seed, i2, j2), x2, y2);
 
-    return Simd::splat(38.283687591552734375) * n0.mul_add(t0, n1.mul_add(t1, n2 * t2));
+    let result = Simd::splat(38.283687591552734375) * n0.mul_add(t0, n1.mul_add(t1, n2 * t2));
+    pipeline.results.push(result);
+    pipeline.next();
 }
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_3d<const N: usize>(
-    node: &NoiseNode<N>,
-    mut x: Simd<f32, N>,
-    mut y: Simd<f32, N>,
-    mut z: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn simplex_3d<const N: usize>(pipeline: &mut NoisePipeline<N>)
 where
     LaneCount<N>: SupportedLaneCount,
 {
     const F3: f32 = 1.0 / 3.0;
     const G3: f32 = 1.0 / 2.0;
 
-    let NoiseNodeSettings::Simplex { seed, frequency } = node.settings else {
+    let node = pipeline.current_node();
+
+    let NoiseSettings::Simplex { seed, frequency } = node.settings else {
         unreachable!()
     };
 
     let seed = Simd::splat(seed);
 
-    x *= Simd::splat(frequency.x);
-    y *= Simd::splat(frequency.y);
-    z *= Simd::splat(frequency.z);
+    let mut x = pipeline.x * Simd::splat(frequency.x);
+    let mut y = pipeline.y * Simd::splat(frequency.y);
+    let mut z = pipeline.z * Simd::splat(frequency.z);
 
     let s = Simd::splat(F3) * (x + y + z);
     x += s;
@@ -287,6 +289,8 @@ where
     let k3 = k + Simd::splat(Z_PRIME);
     let n3 = grad3d_dot(hash3d(seed, i3, j3, k3), x3, y3, z3);
 
-    return Simd::splat(32.69428253173828125)
-        * n0.mul_add(t0, n1.mul_add(t1, n2.mul_add(t2, n3 * t3)));
+    let result =
+        Simd::splat(32.69428253173828125) * n0.mul_add(t0, n1.mul_add(t1, n2.mul_add(t2, n3 * t3)));
+    pipeline.results.push(result);
+    pipeline.next();
 }

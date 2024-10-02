@@ -32,36 +32,38 @@ mod square;
 // it noisy.
 #[derive(Clone, Debug)]
 pub struct Noise {
-    settings: Box<NoiseSettings>,
+    pipeline: Vec<NoiseSettings>,
 }
 
 impl Noise {
     pub fn simplex(frequency: impl Into<Frequency>, seed: i32) -> Self {
         return Self {
-            settings: Box::new(NoiseSettings::Simplex {
+            pipeline: vec![NoiseSettings::Simplex {
                 seed,
                 frequency: frequency.into(),
-            }),
+            }],
         };
     }
 
     pub fn perlin(frequency: impl Into<Frequency>, seed: i32) -> Self {
         return Self {
-            settings: Box::new(NoiseSettings::Perlin {
+            pipeline: vec![NoiseSettings::Perlin {
                 seed,
                 frequency: frequency.into(),
-            }),
+            }],
         };
     }
 
     pub fn constant(value: f32) -> Self {
         return Self {
-            settings: Box::new(NoiseSettings::Constant { value }),
+            pipeline: vec![NoiseSettings::Constant { value }],
         };
     }
 
     /// Fractal Brownian Motion (layered noise)
     pub fn fbm(mut self, octaves: u32, gain: f32, lacunarity: f32) -> Self {
+        assert!(octaves > 0, "There must 1 or more octaves");
+
         // The amplitude gets pre scaled so that it can skip normalizing the result.
         // e.g. if the gain is 0.5 and there are 2 octaves, the amplitude would be 1 + 0.5 = 1.5
         // after both octaves are combined normally. Instead, we set the initial amplitude to be
@@ -75,94 +77,97 @@ impl Noise {
         }
         scale = 1.0 / scale;
 
-        self.settings = Box::new(NoiseSettings::Fbm {
+        // It's not possible to apply the lacunarity when executing since we don't know that the
+        // noise is included in fbm before we reach the fbm node in the pipeline. We then have to
+        // pre-apply the lacunarity to the frequency. The fbm adds the results of the noises from
+        // last to first, so lacunarity is also applied in that order. i.e first noise is the most
+        // lacunarized.
+        let len = self.pipeline.len();
+        for i in (1..octaves).rev() {
+            let current_len = self.pipeline.len();
+            let settings = &mut self.pipeline[current_len - len];
+            match settings {
+                NoiseSettings::Simplex { frequency, .. } => {
+                    let lacunarity = lacunarity.powi(i as i32 - 1);
+                    frequency.x *= lacunarity;
+                    frequency.y *= lacunarity;
+                    frequency.z *= lacunarity;
+                }
+                NoiseSettings::Perlin { frequency, .. } => {
+                    let lacunarity = lacunarity.powi(i as i32);
+                    frequency.x *= lacunarity;
+                    frequency.y *= lacunarity;
+                    frequency.z *= lacunarity;
+                }
+                _ => (),
+            }
+            self.pipeline.extend_from_within(0..len);
+        }
+
+        self.pipeline.push(NoiseSettings::Fbm {
             octaves,
             gain,
-            lacunarity,
             scale,
-            source: self.settings,
         });
         self
     }
 
     /// Convert the noise to absolute values.
     pub fn abs(mut self) -> Self {
-        self.settings = Box::new(NoiseSettings::Abs {
-            source: self.settings,
-        });
+        self.pipeline.push(NoiseSettings::Abs);
         self
     }
 
     /// Add two noises, the result is not normalized.
-    pub fn add(mut self, other: Self) -> Self {
-        self.settings = Box::new(NoiseSettings::AddNoise {
-            left: self.settings,
-            right: other.settings,
-        });
+    pub fn add(mut self, mut other: Self) -> Self {
+        self.pipeline.append(&mut other.pipeline);
+        self.pipeline.push(NoiseSettings::AddNoise);
         self
     }
 
     /// Multiply two noises, the result is not normalized.
-    pub fn mul(mut self, other: Self) -> Self {
-        self.settings = Box::new(NoiseSettings::Mul {
-            left: self.settings,
-            right: other.settings,
-        });
+    pub fn mul(mut self, mut other: Self) -> Self {
+        self.pipeline.append(&mut other.pipeline);
+        self.pipeline.push(NoiseSettings::Mul);
         self
     }
 
     /// Clamp the noise values between min and max
     pub fn clamp(mut self, min: f32, max: f32) -> Self {
-        self.settings = Box::new(NoiseSettings::Clamp {
-            min,
-            max,
-            source: self.settings,
-        });
+        self.pipeline.push(NoiseSettings::Clamp { min, max });
         self
     }
 
     /// Take the max value between the two noises
-    pub fn max(mut self, other: Self) -> Self {
-        self.settings = Box::new(NoiseSettings::Max {
-            left: self.settings,
-            right: other.settings,
-        });
+    pub fn max(mut self, mut other: Self) -> Self {
+        self.pipeline.append(&mut other.pipeline);
+        self.pipeline.push(NoiseSettings::Max);
         self
     }
 
     /// Take the min value between the two noises
-    pub fn min(mut self, other: Self) -> Self {
-        self.settings = Box::new(NoiseSettings::Min {
-            left: self.settings,
-            right: other.settings,
-        });
+    pub fn min(mut self, mut other: Self) -> Self {
+        self.pipeline.append(&mut other.pipeline);
+        self.pipeline.push(NoiseSettings::Min);
         self
     }
 
-    pub fn lerp(mut self, high: Self, low: Self) -> Self {
-        self.settings = Box::new(NoiseSettings::Lerp {
-            selector_source: self.settings,
-            high_source: high.settings,
-            low_source: low.settings,
-        });
+    pub fn lerp(mut self, mut high: Self, mut low: Self) -> Self {
+        self.pipeline.append(&mut high.pipeline);
+        self.pipeline.append(&mut low.pipeline);
+        self.pipeline.push(NoiseSettings::Lerp);
         self
     }
 
-    pub fn range(mut self, high: f32, low: f32, high_noise: Self, low_noise: Self) -> Self {
-        self.settings = Box::new(NoiseSettings::Range {
-            high,
-            low,
-            selector_source: self.settings,
-            high_source: high_noise.settings,
-            low_source: low_noise.settings,
-        });
+    pub fn range(mut self, high: f32, low: f32, mut high_noise: Self, mut low_noise: Self) -> Self {
+        self.pipeline.append(&mut high_noise.pipeline);
+        self.pipeline.append(&mut low_noise.pipeline);
+        self.pipeline.push(NoiseSettings::Range { high, low });
         self
     }
 
     pub fn square(mut self) -> Self {
-        self.settings = Box::new(NoiseSettings::Square {
-            source: self.settings,
-        });
+        self.pipeline.push(NoiseSettings::Square);
         self
     }
 
@@ -238,287 +243,129 @@ enum NoiseSettings {
         value: f32,
     },
     Fbm {
-        /// Total number of octaves
-        /// The number of octaves control the amount of detail in the noise function.
-        /// Adding more octaves increases the detail, with the drawback of increasing the calculation time.
+        // Total number of octaves
+        // The number of octaves control the amount of detail in the noise function.
+        // Adding more octaves increases the detail, with the drawback of increasing the calculation time.
         octaves: u32,
-        /// Gain is a multiplier on the amplitude of each successive octave.
-        /// i.e. A gain of 2.0 will cause each octave to be twice as impactful on the result as the
-        /// previous one.
+        // Gain is a multiplier on the amplitude of each successive octave.
+        // i.e. A gain of 2.0 will cause each octave to be twice as impactful on the result as the
+        // previous one.
         gain: f32,
-        /// Lacunarity is multiplied by the frequency for each successive octave.
-        /// i.e. a value of 2.0 will cause each octave to have double the frequency of the previous one.
-        lacunarity: f32,
-        // Automatically derived scaling factor.
+        // Automatically derived amplitude scaling factor.
         scale: f32,
-        source: Box<NoiseSettings>,
     },
-    Abs {
-        source: Box<NoiseSettings>,
-    },
-    AddNoise {
-        left: Box<NoiseSettings>,
-        right: Box<NoiseSettings>,
-    },
-    Mul {
-        left: Box<NoiseSettings>,
-        right: Box<NoiseSettings>,
-    },
+    Abs,
+    AddNoise,
+    Mul,
     Clamp {
         min: f32,
         max: f32,
-        source: Box<NoiseSettings>,
     },
-    Lerp {
-        selector_source: Box<NoiseSettings>,
-        high_source: Box<NoiseSettings>,
-        low_source: Box<NoiseSettings>,
-    },
-    Max {
-        left: Box<NoiseSettings>,
-        right: Box<NoiseSettings>,
-    },
-    Min {
-        left: Box<NoiseSettings>,
-        right: Box<NoiseSettings>,
-    },
+    Max,
+    Min,
+    Lerp,
     Range {
         high: f32,
         low: f32,
-        selector_source: Box<NoiseSettings>,
-        high_source: Box<NoiseSettings>,
-        low_source: Box<NoiseSettings>,
     },
-    Square {
-        source: Box<NoiseSettings>,
-    },
+    Square,
 }
 
 #[derive(Debug)]
-pub(crate) enum NoiseNodeSettings<const N: usize>
+struct NoisePipeline<const N: usize>
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    Simplex {
-        seed: i32,
-        frequency: Frequency,
-    },
-    Perlin {
-        seed: i32,
-        frequency: Frequency,
-    },
-    Constant {
-        value: f32,
-    },
-    Fbm {
-        octaves: u32,
-        gain: f32,
-        lacunarity: f32,
-        scale: f32,
-        source: Box<NoiseNode<N>>,
-    },
-    Abs {
-        source: Box<NoiseNode<N>>,
-    },
-    AddNoise {
-        left_source: Box<NoiseNode<N>>,
-        right_source: Box<NoiseNode<N>>,
-    },
-    Mul {
-        left_source: Box<NoiseNode<N>>,
-        right_source: Box<NoiseNode<N>>,
-    },
-    Clamp {
-        min: f32,
-        max: f32,
-        source: Box<NoiseNode<N>>,
-    },
-    MaxNoise {
-        left_source: Box<NoiseNode<N>>,
-        right_source: Box<NoiseNode<N>>,
-    },
-    MinNoise {
-        left_source: Box<NoiseNode<N>>,
-        right_source: Box<NoiseNode<N>>,
-    },
-    Lerp {
-        selector: Box<NoiseNode<N>>,
-        low_source: Box<NoiseNode<N>>,
-        high_source: Box<NoiseNode<N>>,
-    },
-    Range {
-        low: f32,
-        high: f32,
-        selector: Box<NoiseNode<N>>,
-        low_source: Box<NoiseNode<N>>,
-        high_source: Box<NoiseNode<N>>,
-    },
-    Square {
-        source: Box<NoiseNode<N>>,
-    },
+    index: usize,
+    results: Vec<Simd<f32, N>>,
+    pipeline: Vec<NoiseNode<N>>,
+    x: Simd<f32, N>,
+    y: Simd<f32, N>,
+    z: Simd<f32, N>,
 }
 
-#[derive(Debug)]
-pub(crate) struct NoiseNode<const N: usize>
+impl<const N: usize> NoisePipeline<N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    pub settings: NoiseNodeSettings<N>,
-    pub function_1d: unsafe fn(node: &NoiseNode<N>, x: Simd<f32, N>) -> Simd<f32, N>,
-    pub function_2d:
-        unsafe fn(node: &NoiseNode<N>, x: Simd<f32, N>, y: Simd<f32, N>) -> Simd<f32, N>,
-    pub function_3d: unsafe fn(
-        node: &NoiseNode<N>,
-        x: Simd<f32, N>,
-        y: Simd<f32, N>,
-        z: Simd<f32, N>,
-    ) -> Simd<f32, N>,
-}
+    #[inline(always)]
+    #[track_caller]
+    fn current_node(&self) -> &NoiseNode<N> {
+        &self.pipeline[self.index]
+    }
 
-impl<const N: usize> From<&Box<NoiseSettings>> for NoiseNode<N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
-    fn from(value: &Box<NoiseSettings>) -> Self {
-        match value.as_ref() {
-            NoiseSettings::Simplex { seed, frequency } => Self {
-                settings: NoiseNodeSettings::Simplex {
-                    seed: *seed,
-                    frequency: *frequency,
+    #[inline(always)]
+    fn next(&mut self) {
+        self.index += 1;
+        if self.index == self.pipeline.len() {
+            return;
+        }
+        unsafe { (&self.pipeline[self.index].function)(self) };
+    }
+
+    #[inline(always)]
+    fn execute(&mut self) -> Simd<f32, N> {
+        self.index = 0;
+        unsafe { (self.pipeline[0].function)(self) };
+        return self.results.pop().unwrap();
+    }
+
+    fn build(noise: &Noise, dimensions: Dimensions) -> Self {
+        let mut pipeline = Vec::with_capacity(noise.pipeline.len());
+
+        for settings in noise.pipeline.iter().cloned() {
+            let function = match settings {
+                NoiseSettings::Simplex { .. } => match dimensions {
+                    Dimensions::X => crate::simplex::simplex_1d(),
+                    Dimensions::XY => crate::simplex::simplex_2d(),
+                    Dimensions::XYZ => crate::simplex::simplex_3d(),
                 },
-                function_1d: crate::simplex::simplex_1d(),
-                function_2d: crate::simplex::simplex_2d(),
-                function_3d: crate::simplex::simplex_3d(),
-            },
-            NoiseSettings::Perlin { seed, frequency } => Self {
-                settings: NoiseNodeSettings::Perlin {
-                    seed: *seed,
-                    frequency: *frequency,
+                NoiseSettings::Perlin { .. } => match dimensions {
+                    Dimensions::X => crate::simplex::simplex_1d(),
+                    Dimensions::XY => crate::perlin::perlin_2d(),
+                    Dimensions::XYZ => crate::perlin::perlin_3d(),
                 },
-                function_1d: crate::simplex::simplex_1d(),
-                function_2d: crate::perlin::perlin_2d(),
-                function_3d: crate::perlin::perlin_3d(),
-            },
-            NoiseSettings::Constant { value } => Self {
-                settings: NoiseNodeSettings::Constant { value: *value },
-                function_1d: crate::constant::constant_1d(),
-                function_2d: crate::constant::constant_2d(),
-                function_3d: crate::constant::constant_3d(),
-            },
-            NoiseSettings::Fbm {
-                octaves,
-                gain,
-                lacunarity,
-                scale,
-                source,
-            } => Self {
-                settings: NoiseNodeSettings::Fbm {
-                    octaves: *octaves,
-                    gain: *gain,
-                    lacunarity: *lacunarity,
-                    scale: *scale,
-                    source: Box::new(Self::from(source)),
-                },
-                function_1d: crate::fbm::fbm_1d(),
-                function_2d: crate::fbm::fbm_2d(),
-                function_3d: crate::fbm::fbm_3d(),
-            },
-            NoiseSettings::Abs { source } => Self {
-                settings: NoiseNodeSettings::Abs {
-                    source: Box::new(Self::from(source)),
-                },
-                function_1d: crate::abs::abs_1d(),
-                function_2d: crate::abs::abs_2d(),
-                function_3d: crate::abs::abs_3d(),
-            },
-            NoiseSettings::AddNoise { left, right } => Self {
-                settings: NoiseNodeSettings::AddNoise {
-                    left_source: Box::new(Self::from(left)),
-                    right_source: Box::new(Self::from(right)),
-                },
-                function_1d: crate::add::add_1d(),
-                function_2d: crate::add::add_2d(),
-                function_3d: crate::add::add_3d(),
-            },
-            NoiseSettings::Mul { left, right } => Self {
-                settings: NoiseNodeSettings::Mul {
-                    left_source: Box::new(Self::from(left)),
-                    right_source: Box::new(Self::from(right)),
-                },
-                function_1d: crate::mul::mul_1d(),
-                function_2d: crate::mul::mul_2d(),
-                function_3d: crate::mul::mul_3d(),
-            },
-            NoiseSettings::Clamp { min, max, source } => Self {
-                settings: NoiseNodeSettings::Clamp {
-                    min: *min,
-                    max: *max,
-                    source: Box::new(Self::from(source)),
-                },
-                function_1d: crate::clamp::clamp_1d(),
-                function_2d: crate::clamp::clamp_2d(),
-                function_3d: crate::clamp::clamp_3d(),
-            },
-            NoiseSettings::Max { left, right } => Self {
-                settings: NoiseNodeSettings::MaxNoise {
-                    left_source: Box::new(Self::from(left)),
-                    right_source: Box::new(Self::from(right)),
-                },
-                function_1d: crate::min_and_max::max_1d(),
-                function_2d: crate::min_and_max::max_2d(),
-                function_3d: crate::min_and_max::max_3d(),
-            },
-            NoiseSettings::Min { left, right } => Self {
-                settings: NoiseNodeSettings::MinNoise {
-                    left_source: Box::new(Self::from(left)),
-                    right_source: Box::new(Self::from(right)),
-                },
-                function_1d: crate::min_and_max::min_1d(),
-                function_2d: crate::min_and_max::min_2d(),
-                function_3d: crate::min_and_max::min_3d(),
-            },
-            NoiseSettings::Lerp {
-                selector_source,
-                low_source,
-                high_source,
-            } => NoiseNode {
-                settings: NoiseNodeSettings::Lerp {
-                    selector: Box::new(Self::from(selector_source)),
-                    low_source: Box::new(Self::from(low_source)),
-                    high_source: Box::new(Self::from(high_source)),
-                },
-                function_1d: crate::lerp::lerp_1d(),
-                function_2d: crate::lerp::lerp_2d(),
-                function_3d: crate::lerp::lerp_3d(),
-            },
-            NoiseSettings::Range {
-                high,
-                low,
-                selector_source,
-                high_source,
-                low_source,
-            } => NoiseNode {
-                settings: NoiseNodeSettings::Range {
-                    low: *low,
-                    high: *high,
-                    selector: Box::new(Self::from(selector_source)),
-                    low_source: Box::new(Self::from(low_source)),
-                    high_source: Box::new(Self::from(high_source)),
-                },
-                function_1d: crate::range::range_1d(),
-                function_2d: crate::range::range_2d(),
-                function_3d: crate::range::range_3d(),
-            },
-            NoiseSettings::Square { source } => Self {
-                settings: NoiseNodeSettings::Square {
-                    source: Box::new(Self::from(source)),
-                },
-                function_1d: crate::square::square_1d(),
-                function_2d: crate::square::square_2d(),
-                function_3d: crate::square::square_3d(),
-            },
+                NoiseSettings::Constant { .. } => crate::constant::constant(),
+                NoiseSettings::Fbm { .. } => crate::fbm::fbm(),
+                NoiseSettings::Abs { .. } => crate::abs::abs(),
+                NoiseSettings::AddNoise { .. } => crate::add::add(),
+                NoiseSettings::Mul { .. } => crate::mul::mul(),
+                NoiseSettings::Clamp { .. } => crate::clamp::clamp(),
+                NoiseSettings::Max { .. } => crate::min_and_max::max(),
+                NoiseSettings::Min { .. } => crate::min_and_max::min(),
+                NoiseSettings::Lerp { .. } => crate::lerp::lerp(),
+                NoiseSettings::Range { .. } => crate::range::range(),
+                NoiseSettings::Square { .. } => crate::square::square(),
+            };
+            let noise_node = NoiseNode { settings, function };
+
+            pipeline.push(noise_node)
+        }
+
+        NoisePipeline {
+            index: 0,
+            pipeline,
+            results: Vec::new(),
+            x: Simd::splat(0.0),
+            y: Simd::splat(0.0),
+            z: Simd::splat(0.0),
         }
     }
+}
+
+enum Dimensions {
+    X,
+    XY,
+    XYZ,
+}
+
+#[derive(Debug)]
+struct NoiseNode<const N: usize>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    pub settings: NoiseSettings,
+    pub function: unsafe fn(pipeline: &mut NoisePipeline<N>),
 }
 
 #[multiversion(targets = "simd")]
@@ -528,10 +375,6 @@ fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
     } else {
         1
     };
-
-    let noise_node = NoiseNode::<N>::from(&noise.settings);
-
-    let start_x = x;
 
     let mut min_s = Simd::splat(f32::MAX);
     let mut max_s = Simd::splat(f32::MIN);
@@ -549,21 +392,23 @@ fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
         x_arr.set_len(vector_width);
     }
     for i in (0..vector_width).rev() {
-        x_arr[i] = start_x + i as f32;
+        x_arr[i] = x + i as f32;
     }
 
+    let mut pipeline = NoisePipeline::<N>::build(noise, Dimensions::X);
+    pipeline.x = Simd::from_slice(&x_arr);
+
     let mut i = 0;
-    let mut x = Simd::from_slice(&x_arr);
     for _ in 0..width / vector_width {
-        let f = unsafe { (noise_node.function_1d)(&noise_node, x) };
+        let f = pipeline.execute();
         max_s = max_s.simd_max(f);
         min_s = min_s.simd_min(f);
         f.copy_to_slice(&mut result[i..]);
         i += vector_width;
-        x += Simd::splat(vector_width as f32);
+        pipeline.x += Simd::splat(vector_width as f32);
     }
     if remainder != 0 {
-        let f = unsafe { (noise_node.function_1d)(&noise_node, x) };
+        let f = pipeline.execute();
         for j in 0..remainder {
             let n = f[j];
             unsafe {
@@ -597,10 +442,6 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
         1
     };
 
-    let noise_node = NoiseNode::<N>::from(&noise.settings);
-    let start_x = y;
-    let start_y = x;
-
     let mut min_s = Simd::splat(f32::MAX);
     let mut max_s = Simd::splat(f32::MIN);
     let mut min = f32::MAX;
@@ -610,8 +451,7 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
     unsafe {
         result.set_len(width * height);
     }
-    let mut y = Simd::splat(start_y);
-    let mut i = 0;
+
     let vector_width = N;
     let remainder = width % vector_width;
     let mut x_arr = Vec::with_capacity(vector_width);
@@ -619,20 +459,25 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
         x_arr.set_len(vector_width);
     }
     for i in (0..vector_width).rev() {
-        x_arr[i] = start_x + i as f32;
+        x_arr[i] = x + i as f32;
     }
+
+    let mut pipeline = NoisePipeline::<N>::build(noise, Dimensions::XY);
+    pipeline.y = Simd::splat(y);
+
+    let mut i = 0;
     for _ in 0..height {
-        let mut x = Simd::from_slice(&x_arr);
+        pipeline.x = Simd::from_slice(&x_arr);
         for _ in 0..width / vector_width {
-            let f = unsafe { (noise_node.function_2d)(&noise_node, x, y) };
+            let f = pipeline.execute();
             max_s = max_s.simd_max(f);
             min_s = min_s.simd_min(f);
             f.copy_to_slice(&mut result[i..]);
             i += vector_width;
-            x += Simd::splat(vector_width as f32);
+            pipeline.x += Simd::splat(vector_width as f32);
         }
         if remainder != 0 {
-            let f = unsafe { (noise_node.function_2d)(&noise_node, x, y) };
+            let f = pipeline.execute();
             for j in 0..remainder {
                 let n = f[j];
                 unsafe {
@@ -647,7 +492,7 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
                 i += 1;
             }
         }
-        y += Simd::splat(1.0);
+        pipeline.y += Simd::splat(1.0);
     }
     for i in 0..vector_width {
         if min_s[i] < min {
@@ -675,11 +520,6 @@ fn generate_3d(
     } else {
         1
     };
-    let noise_node = NoiseNode::<N>::from(&noise.settings);
-
-    let start_x = x;
-    let start_y = y;
-    let start_z = z;
 
     let mut min_s = Simd::splat(f32::MAX);
     let mut max_s = Simd::splat(f32::MIN);
@@ -698,27 +538,29 @@ fn generate_3d(
         y_arr.set_len(vector_width);
     }
     for i in (0..vector_width).rev() {
-        y_arr[i] = start_y + i as f32;
+        y_arr[i] = y + i as f32;
     }
+
+    let mut pipeline = NoisePipeline::<N>::build(noise, Dimensions::XYZ);
 
     // TODO: This loop in loop system is maybe not good? Try a flat design where "overflowing"
     // values of the first axis is transfered to the second, and same for second to third every
     // iteration.
-    let mut x = Simd::splat(start_x);
+    pipeline.x = Simd::splat(x);
     for _ in 0..width {
-        let mut z = Simd::splat(start_z);
+        pipeline.z = Simd::splat(z);
         for _ in 0..depth {
-            let mut y = Simd::from_slice(&y_arr);
+            pipeline.y = Simd::from_slice(&y_arr);
             for _ in 0..height / vector_width {
-                let f = unsafe { (noise_node.function_3d)(&noise_node, x, y, z) };
+                let f = pipeline.execute();
                 max_s = max_s.simd_max(f);
                 min_s = min_s.simd_min(f);
                 f.copy_to_slice(&mut result[i..]);
                 i += vector_width;
-                y = y + Simd::splat(vector_width as f32);
+                pipeline.y += Simd::splat(vector_width as f32);
             }
             if remainder != 0 {
-                let f = unsafe { (noise_node.function_3d)(&noise_node, x, y, z) };
+                let f = pipeline.execute();
                 for j in 0..remainder {
                     let n = f[j];
                     unsafe {
@@ -733,9 +575,9 @@ fn generate_3d(
                     i += 1;
                 }
             }
-            z = z + Simd::splat(1.0);
+            pipeline.z += Simd::splat(1.0);
         }
-        x = x + Simd::splat(1.0);
+        pipeline.x += Simd::splat(1.0);
     }
     for i in 0..vector_width {
         if min_s[i] < min {

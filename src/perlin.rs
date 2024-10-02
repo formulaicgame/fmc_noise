@@ -7,22 +7,20 @@ use crate::gradient::grad3d_dot;
 use crate::gradient::hash2d;
 use crate::gradient::hash3d;
 use crate::gradient::{grad1, grad2};
-use crate::{NoiseNode, NoiseNodeSettings};
+use crate::{NoisePipeline, NoiseSettings};
 
 pub const X_PRIME: i32 = 501125321;
 pub const Y_PRIME: i32 = 1136930381;
 pub const Z_PRIME: i32 = 1720413743;
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn perlin_2d<const N: usize>(
-    node: &NoiseNode<N>,
-    mut x: Simd<f32, N>,
-    mut y: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn perlin_2d<const N: usize>(pipeline: &mut NoisePipeline<N>)
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    let NoiseNodeSettings::Perlin {
+    let node = pipeline.current_node();
+
+    let NoiseSettings::Perlin {
         seed, frequency, ..
     } = node.settings
     else {
@@ -31,8 +29,8 @@ where
 
     let seed = Simd::splat(seed);
 
-    x *= Simd::splat(frequency.x);
-    y *= Simd::splat(frequency.z);
+    let x = pipeline.x * Simd::splat(frequency.x);
+    let y = pipeline.y * Simd::splat(frequency.z);
 
     let mut xs = x.floor();
     let mut ys = y.floor();
@@ -52,7 +50,7 @@ where
     xs = interpolate_quintic(xf0);
     ys = interpolate_quintic(yf0);
 
-    return Simd::splat(0.579106986522674560546875)
+    let result = Simd::splat(0.579106986522674560546875)
         * lerp(
             lerp(
                 grad2(hash2d(seed, x0, y0), xf0, yf0),
@@ -66,26 +64,26 @@ where
             ),
             ys,
         );
+
+    pipeline.results.push(result);
+    pipeline.next();
 }
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn perlin_3d<const N: usize>(
-    node: &NoiseNode<N>,
-    mut x: Simd<f32, N>,
-    mut y: Simd<f32, N>,
-    mut z: Simd<f32, N>,
-) -> Simd<f32, N>
+pub fn perlin_3d<const N: usize>(pipeline: &mut NoisePipeline<N>)
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    let NoiseNodeSettings::Perlin { seed, frequency } = node.settings else {
+    let node = pipeline.current_node();
+
+    let NoiseSettings::Perlin { seed, frequency } = node.settings else {
         unreachable!()
     };
 
     let seed = Simd::splat(seed);
 
-    x *= Simd::splat(frequency.x);
-    y *= Simd::splat(frequency.y);
-    z *= Simd::splat(frequency.z);
+    let x = pipeline.x * Simd::splat(frequency.x);
+    let y = pipeline.y * Simd::splat(frequency.y);
+    let z = pipeline.z * Simd::splat(frequency.z);
 
     let mut xs = x.floor();
     let mut ys = y.floor();
@@ -110,7 +108,7 @@ where
     ys = interpolate_quintic(yf0);
     zs = interpolate_quintic(zf0);
 
-    return Simd::splat(0.964921414852142333984375)
+    let result = Simd::splat(0.964921414852142333984375)
         * lerp(
             lerp(
                 lerp(
@@ -140,8 +138,12 @@ where
             ),
             zs,
         );
+
+    pipeline.results.push(result);
+    pipeline.next();
 }
 
+#[inline(always)]
 fn lerp<const N: usize>(a: Simd<f32, N>, b: Simd<f32, N>, t: Simd<f32, N>) -> Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
@@ -149,6 +151,7 @@ where
     return t.mul_add(b - a, a);
 }
 
+#[inline(always)]
 fn interpolate_quintic<const N: usize>(v: Simd<f32, N>) -> Simd<f32, N>
 where
     LaneCount<N>: SupportedLaneCount,
