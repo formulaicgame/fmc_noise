@@ -61,7 +61,7 @@ fn fbm_3d(c: &mut Criterion) {
     let noise = Noise::perlin(0.01, 0)
         .fbm(8, 0.5, 2.0)
         .range(0.1, -0.1, high, low)
-        .mul_value(2.0);
+        .mul(Noise::constant(2.0));
     group.bench_function("lib", move |b| {
         b.iter(|| noise.generate_3d(0.0, 0.0, 0.0, 16, 16, 16))
     });

@@ -93,7 +93,7 @@ impl Noise {
         self
     }
 
-    /// Add two noises together, the result is not normalized.
+    /// Add two noises, the result is not normalized.
     pub fn add(mut self, other: Self) -> Self {
         self.settings = Box::new(NoiseSettings::AddNoise {
             left: self.settings,
@@ -102,12 +102,11 @@ impl Noise {
         self
     }
 
-    // TODO: Remove and replace with noise::constant, same for mul_value
-    /// Add a value to the noise
-    pub fn add_value(mut self, value: f32) -> Self {
-        self.settings = Box::new(NoiseSettings::AddValue {
-            value,
-            source: self.settings,
+    /// Multiply two noises, the result is not normalized.
+    pub fn mul(mut self, other: Self) -> Self {
+        self.settings = Box::new(NoiseSettings::Mul {
+            left: self.settings,
+            right: other.settings,
         });
         self
     }
@@ -136,16 +135,6 @@ impl Noise {
         self.settings = Box::new(NoiseSettings::Min {
             left: self.settings,
             right: other.settings,
-        });
-        self
-    }
-
-    // TODO: Convert to just 'mul' and take a noise
-    /// Multiply the noise by a value.
-    pub fn mul_value(mut self, value: f32) -> Self {
-        self.settings = Box::new(NoiseSettings::MulValue {
-            value,
-            source: self.settings,
         });
         self
     }
@@ -271,9 +260,9 @@ enum NoiseSettings {
         left: Box<NoiseSettings>,
         right: Box<NoiseSettings>,
     },
-    AddValue {
-        value: f32,
-        source: Box<NoiseSettings>,
+    Mul {
+        left: Box<NoiseSettings>,
+        right: Box<NoiseSettings>,
     },
     Clamp {
         min: f32,
@@ -292,10 +281,6 @@ enum NoiseSettings {
     Min {
         left: Box<NoiseSettings>,
         right: Box<NoiseSettings>,
-    },
-    MulValue {
-        value: f32,
-        source: Box<NoiseSettings>,
     },
     Range {
         high: f32,
@@ -339,9 +324,9 @@ where
         left_source: Box<NoiseNode<N>>,
         right_source: Box<NoiseNode<N>>,
     },
-    AddValue {
-        value: f32,
-        source: Box<NoiseNode<N>>,
+    Mul {
+        left_source: Box<NoiseNode<N>>,
+        right_source: Box<NoiseNode<N>>,
     },
     Clamp {
         min: f32,
@@ -355,10 +340,6 @@ where
     MinNoise {
         left_source: Box<NoiseNode<N>>,
         right_source: Box<NoiseNode<N>>,
-    },
-    MulValue {
-        value: f32,
-        source: Box<NoiseNode<N>>,
     },
     Lerp {
         selector: Box<NoiseNode<N>>,
@@ -459,14 +440,14 @@ where
                 function_2d: crate::add::add_2d(),
                 function_3d: crate::add::add_3d(),
             },
-            NoiseSettings::AddValue { value, source } => Self {
-                settings: NoiseNodeSettings::AddValue {
-                    value: *value,
-                    source: Box::new(Self::from(source)),
+            NoiseSettings::Mul { left, right } => Self {
+                settings: NoiseNodeSettings::Mul {
+                    left_source: Box::new(Self::from(left)),
+                    right_source: Box::new(Self::from(right)),
                 },
-                function_1d: crate::add::add_value_1d(),
-                function_2d: crate::add::add_value_2d(),
-                function_3d: crate::add::add_value_3d(),
+                function_1d: crate::mul::mul_1d(),
+                function_2d: crate::mul::mul_2d(),
+                function_3d: crate::mul::mul_3d(),
             },
             NoiseSettings::Clamp { min, max, source } => Self {
                 settings: NoiseNodeSettings::Clamp {
@@ -495,15 +476,6 @@ where
                 function_1d: crate::min_and_max::min_1d(),
                 function_2d: crate::min_and_max::min_2d(),
                 function_3d: crate::min_and_max::min_3d(),
-            },
-            NoiseSettings::MulValue { value, source } => Self {
-                settings: NoiseNodeSettings::MulValue {
-                    value: *value,
-                    source: Box::new(Self::from(source)),
-                },
-                function_1d: crate::mul::mul_value_1d(),
-                function_2d: crate::mul::mul_value_2d(),
-                function_3d: crate::mul::mul_value_3d(),
             },
             NoiseSettings::Lerp {
                 selector_source,
