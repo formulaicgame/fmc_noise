@@ -5,7 +5,7 @@ use fmc_noise::Noise;
 fn d1(c: &mut Criterion) {
     let mut group = c.benchmark_group("gradient_1d");
 
-    let noise = Noise::simplex(0.01, 0);
+    let noise = Noise::simplex(0.01);
     group.bench_function("lib", |b| b.iter(|| noise.generate_1d(0.0, 1000000)));
 
     //let settings = simdnoise::NoiseBuilder::gradient_1d(1000).wrap();
@@ -20,7 +20,7 @@ fn d1(c: &mut Criterion) {
 
 fn d2(c: &mut Criterion) {
     let mut group = c.benchmark_group("gradient_2d");
-    let noise = Noise::simplex(0.01, 0);
+    let noise = Noise::simplex(0.01);
     group.bench_function("lib", move |b| {
         b.iter(|| noise.generate_2d(0.0, 0.0, 1000, 1000))
     });
@@ -37,7 +37,7 @@ fn d2(c: &mut Criterion) {
 
 fn d3(c: &mut Criterion) {
     let mut group = c.benchmark_group("gradient_3d");
-    let noise = Noise::simplex(0.01, 0);
+    let noise = Noise::simplex(0.01);
     group.bench_function("lib", move |b| {
         b.iter(|| noise.generate_3d(0.0, 0.0, 0.0, 100, 100, 100))
     });
@@ -56,9 +56,9 @@ fn fbm_3d(c: &mut Criterion) {
     let mut group = c.benchmark_group("fbm_3d");
 
     let freq = 1.0 / 2.0f32.powi(8);
-    let high = Noise::perlin(freq, 2).fbm(4, 0.5, 2.0);
-    let low = Noise::perlin(freq, 3).fbm(4, 0.5, 2.0);
-    let noise = Noise::perlin(0.01, 0)
+    let high = Noise::perlin(freq).fbm(4, 0.5, 2.0);
+    let low = Noise::perlin(freq).fbm(4, 0.5, 2.0);
+    let noise = Noise::perlin(freq)
         .fbm(8, 0.5, 2.0)
         .range(0.1, -0.1, high, low)
         .mul(Noise::constant(2.0));
@@ -75,8 +75,8 @@ fn fbm_3d(c: &mut Criterion) {
 fn add_3d(c: &mut Criterion) {
     let mut group = c.benchmark_group("add_3d");
 
-    let noise = Noise::simplex(0.01, 0).fbm(3, 1.0, 1.0);
-    let noise2 = Noise::simplex(0.01, 0).fbm(3, 1.0, 1.0);
+    let noise = Noise::simplex(0.01).fbm(3, 1.0, 1.0);
+    let noise2 = Noise::simplex(0.01).fbm(3, 1.0, 1.0);
     let noise = noise.add(noise2);
     group.bench_function("lib", move |b| {
         b.iter(|| noise.generate_3d(0.0, 0.0, 0.0, 100, 100, 100))

@@ -13,8 +13,9 @@ where
     let high = pipeline.results.pop().unwrap();
     let selector = pipeline.results.pop().unwrap();
 
-    // This is just a special proprety of the -1..1 range. It's shifted up to be 0..1
-    let interpolation = selector.mul_add(Simd::splat(0.5), Simd::splat(1.0));
+    // This is a special proprety of the -1..1 range, so the selector noise is required to be in
+    // that range. It's shifted up to be 0..1
+    let interpolation = selector.mul_add(Simd::splat(0.5), Simd::splat(0.5));
     let result = (high - low).mul_add(interpolation, low);
 
     pipeline.results.push(result);

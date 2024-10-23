@@ -20,14 +20,11 @@ where
 {
     let node = pipeline.current_node();
 
-    let NoiseSettings::Perlin {
-        seed, frequency, ..
-    } = node.settings
-    else {
+    let NoiseSettings::Perlin { frequency } = node.settings else {
         unreachable!()
     };
 
-    let seed = Simd::splat(seed);
+    let seed = Simd::splat(pipeline.rng.next());
 
     let x = pipeline.x * Simd::splat(frequency.x);
     let y = pipeline.y * Simd::splat(frequency.z);
@@ -75,11 +72,11 @@ where
 {
     let node = pipeline.current_node();
 
-    let NoiseSettings::Perlin { seed, frequency } = node.settings else {
+    let NoiseSettings::Perlin { frequency } = node.settings else {
         unreachable!()
     };
 
-    let seed = Simd::splat(seed);
+    let seed = Simd::splat(pipeline.rng.next());
 
     let x = pipeline.x * Simd::splat(frequency.x);
     let y = pipeline.y * Simd::splat(frequency.y);

@@ -53,14 +53,11 @@ where
 {
     let node = pipeline.current_node();
 
-    let NoiseSettings::Simplex {
-        seed, frequency, ..
-    } = node.settings
-    else {
+    let NoiseSettings::Simplex { frequency } = node.settings else {
         unreachable!()
     };
 
-    let seed = Simd::splat(seed);
+    let seed = Simd::splat(pipeline.rng.next());
     let freq = Simd::splat(frequency.x);
     let x = pipeline.x * freq;
 
@@ -133,14 +130,11 @@ where
 
     let node = pipeline.current_node();
 
-    let NoiseSettings::Simplex {
-        seed, frequency, ..
-    } = node.settings
-    else {
+    let NoiseSettings::Simplex { frequency } = node.settings else {
         unreachable!()
     };
 
-    let seed = Simd::splat(seed);
+    let seed = Simd::splat(pipeline.rng.next());
     let x = pipeline.x * Simd::splat(frequency.x);
     let y = pipeline.y * Simd::splat(frequency.z);
 
@@ -202,11 +196,11 @@ where
 
     let node = pipeline.current_node();
 
-    let NoiseSettings::Simplex { seed, frequency } = node.settings else {
+    let NoiseSettings::Simplex { frequency } = node.settings else {
         unreachable!()
     };
 
-    let seed = Simd::splat(seed);
+    let seed = Simd::splat(pipeline.rng.next());
 
     let mut x = pipeline.x * Simd::splat(frequency.x);
     let mut y = pipeline.y * Simd::splat(frequency.y);

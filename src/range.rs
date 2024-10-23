@@ -15,15 +15,15 @@ where
 
     let node = pipeline.current_node();
 
-    let NoiseSettings::Range { high, low } = node.settings else {
+    let NoiseSettings::Range { low, high } = node.settings else {
         unreachable!()
     };
 
-    let high = Simd::splat(high);
     let low = Simd::splat(low);
+    let high = Simd::splat(high);
 
-    let high_clipped = selector_noise.simd_gt(high);
     let low_clipped = selector_noise.simd_lt(low);
+    let high_clipped = selector_noise.simd_gt(high);
 
     let mut interpolation = (selector_noise - low) / (high - low);
     interpolation = (high_noise - low_noise).mul_add(interpolation, low_noise);

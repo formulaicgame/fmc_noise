@@ -1,5 +1,4 @@
 #![feature(portable_simd)]
-#![allow(private_bounds)]
 
 use std::simd::prelude::*;
 
@@ -28,45 +27,124 @@ mod square;
 //type Float = f32;
 //type Int = i32;
 
+/// Defines a noise
+///
+/// # Example
+/// ```rust
+/// // Ridged fractal noise with values from 0.5 to 1.5
+/// let x = 0.0;
+/// let y = 0.0;
+/// let z = 0.0;
+/// let width = 16;
+/// let height = 16;
+/// let depth = 16;
+///
+/// let octaves = 5;
+/// let gain = 0.5;
+/// let lacunarity = 2.0;
+///
+/// let seed = 42;
+///
+/// let noise = Noise::perlin(0.01)
+///     .seed(seed)
+///     .fbm(octaves, gain, lacunarity)
+///     .abs()
+///     .add(Noise::constant(0.5))
+///     .generate_3d(x, y, z, width, height, depth);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Noise {
+    seed: u64,
     pipeline: Vec<NoiseSettings>,
 }
 
 impl Noise {
-    pub fn simplex(frequency: impl Into<Frequency>, seed: i32) -> Self {
+    /// [Simplex noise](https://en.wikipedia.org/wiki/Simplex_noise)  
+    ///
+    /// # Example
+    /// ```rust
+    /// let noise = Noise::simplex(0.01);
+    /// // Is equivalent to
+    /// let noise = Noise::simplex(Frequency { x: 0.01, y: 0.01, z: 0.01 });
+    /// ```
+    pub fn simplex(frequency: impl Into<Frequency>) -> Self {
         return Self {
+            seed: 0,
             pipeline: vec![NoiseSettings::Simplex {
-                seed,
                 frequency: frequency.into(),
             }],
         };
     }
 
-    pub fn perlin(frequency: impl Into<Frequency>, seed: i32) -> Self {
+    /// [Perlin noise](https://en.wikipedia.org/wiki/Perlin_noise)  
+    ///
+    /// # Example
+    /// See [`Frequency`] for convenient [`From`] implementations.
+    /// ```rust
+    /// let noise = Noise::perlin(0.01);
+    /// // Is equivalent to
+    /// let noise = Noise::perlin(Frequency { x: 0.01, y: 0.01, z: 0.01 });
+    /// ```
+    pub fn perlin(frequency: impl Into<Frequency>) -> Self {
         return Self {
+            seed: 0,
             pipeline: vec![NoiseSettings::Perlin {
-                seed,
                 frequency: frequency.into(),
             }],
         };
     }
 
+    /// A constant number, useful for shifting values.
+    ///
+    /// # Example
+    /// ```rust
+    /// // Noise moved from -1..1 to 0..1
+    /// let noise = Noise::simplex(0.01)
+    ///     .mul(Noise::constant(0.5))
+    ///     .add(Noise::constant(0.5));
+    /// ```
     pub fn constant(value: f32) -> Self {
         return Self {
+            seed: 0,
             pipeline: vec![NoiseSettings::Constant { value }],
         };
     }
 
-    /// Fractal Brownian Motion (layered noise)
+    /// Set the seed of the random number generator.
+    ///
+    /// # Example
+    /// ```rust
+    /// let noise_left = Noise::simplex(0.01).seed(1);
+    /// let noise_right = Noise::simplex(0.01).seed(2);
+    /// // In cases like this the seed is always taken from the noise the method is called on,
+    /// // so the seed here will be 1.
+    /// let noise = noise_left.add(noise_right);
+    /// ```
+    pub fn seed(mut self, seed: u32) -> Self {
+        self.seed = seed as u64;
+        self
+    }
+
+    /// [Fractal Brownian Motion](https://en.wikipedia.org/wiki/Fractional_Brownian_motion)
+    ///
+    /// Computes `octaves` layers of noise and adds them together, normalizing the result. Each
+    /// consecutive octave has its frequency multiplied by `lacunarity` and its amplitude
+    /// multiplied by `gain`.
+    ///
+    /// # Example
+    /// ```rust
+    /// // Common values for gain and lacunarity. Each octave has half the amplitude and twice
+    /// // the frequency, addding finer detail to the noise.
+    /// let noise = Noise::simplex(0.01).fbm(5, 0.5, 2.0);
+    /// ```
     pub fn fbm(mut self, octaves: u32, gain: f32, lacunarity: f32) -> Self {
         assert!(octaves > 0, "There must be 1 or more octaves");
 
-        // The amplitude gets pre scaled so that it can skip normalizing the result.
+        // The amplitude gets pre-scaled so that we can skip normalizing the result.
         // e.g. if the gain is 0.5 and there are 2 octaves, the amplitude would be 1 + 0.5 = 1.5
-        // after both octaves are combined normally. Instead, we set the initial amplitude to be
-        // 1/1.5 == 2/3 and so the second octave's amplitude becomes 2/3 * 0.5 = 1/3 and we end up
-        // with a normalized result naturally.
+        // when both octaves are combined normally. Instead, we set the initial amplitude to be
+        // 1/1.5 == 2/3, the second octave's amplitude becomes 2/3 * 0.5 = 1/3 and we end up with a
+        // normalized result naturally.
         let mut amp = gain;
         let mut scaled_amplitude = 1.0;
         for _ in 1..octaves {
@@ -110,7 +188,7 @@ impl Noise {
         self
     }
 
-    /// Convert the noise to absolute values.
+    /// Computes the absolute value of the noise
     pub fn abs(mut self) -> Self {
         self.pipeline.push(NoiseSettings::Abs);
         self
@@ -130,28 +208,30 @@ impl Noise {
         self
     }
 
-    /// Clamp the noise values between min and max
+    /// Clamp the noise between min and max
     pub fn clamp(mut self, min: f32, max: f32) -> Self {
         self.pipeline.push(NoiseSettings::Clamp { min, max });
         self
     }
 
-    /// Take the max value between the two noises
+    /// Take the maximum of the two noises
     pub fn max(mut self, mut other: Self) -> Self {
         self.pipeline.append(&mut other.pipeline);
         self.pipeline.push(NoiseSettings::Max);
         self
     }
 
-    /// Take the min value between the two noises
+    /// Take the minimum of the two noises
     pub fn min(mut self, mut other: Self) -> Self {
         self.pipeline.append(&mut other.pipeline);
         self.pipeline.push(NoiseSettings::Min);
         self
     }
 
-    /// Linearly interpolate between high and low using the input noise
-    pub fn lerp(mut self, mut high: Self, mut low: Self) -> Self {
+    /// Linearly interpolate between high and low using the input noise.
+    /// <div class="warning">The 'self' noise is required to be in the -1..1 range.</div>
+    pub fn lerp(mut self, mut low: Self, mut high: Self) -> Self {
+        // XXX: Append order is important for result order
         self.pipeline.append(&mut high.pipeline);
         self.pipeline.append(&mut low.pipeline);
         self.pipeline.push(NoiseSettings::Lerp);
@@ -161,34 +241,80 @@ impl Noise {
     /// Interpolate between the high and low noise. When the input noise is above 'high' it's
     /// clamped to the high noise, and below 'low' to the low noise. When in-between, use the input
     /// noise to linearly interpolate between them.
-    pub fn range(mut self, high: f32, low: f32, mut high_noise: Self, mut low_noise: Self) -> Self {
+    /// <div class="warning">The 'self' noise is required to be in the -1..1 range.</div>
+    pub fn range(mut self, low: f32, high: f32, mut low_noise: Self, mut high_noise: Self) -> Self {
+        // XXX: Append order is important for result order
         self.pipeline.append(&mut high_noise.pipeline);
         self.pipeline.append(&mut low_noise.pipeline);
-        self.pipeline.push(NoiseSettings::Range { high, low });
+        self.pipeline.push(NoiseSettings::Range { low, high });
         self
     }
 
-    /// Square the noise
+    /// Square the noise, noise²
     pub fn square(mut self) -> Self {
         self.pipeline.push(NoiseSettings::Square);
         self
     }
 
     /// Generates a line of noise. It also returns the min and max value generated.
+    ///
+    /// # Example
+    /// ```
+    /// let width = 16;
+    /// let noise = Noise::perlin(0.01).generate_1d(0.0, width);
+    /// for x in 0..width {
+    ///     let value = noise[x];
+    /// }
+    /// ```
     pub fn generate_1d(&self, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
         generate_1d(self, x, width)
     }
 
-    /// Generates a plane of noise. The result is a flat array that can be
-    /// indexed by x * X_WIDTH + z
-    /// It also returns the min and max value generated.
+    /// Generates a plane of noise. It also returns the min and max value generated.
+    ///
+    /// # Example
+    /// ```
+    /// let width = 16;
+    /// let height = 16;
+    /// let noise = Noise::perlin(0.01).generate_2d(0.0, 0.0, width, height);
+    /// for x in 0..width {
+    ///     for y in 0..height {
+    ///         // This is how you should index the generated values
+    ///         let index = x * height + y;
+    ///         let value = noise[index];
+    ///         // If width == height and it's a power of 2 you can also index like this
+    ///         // 16 is 2^4 so we use 4 to shift. At 32 it would be 5, and 64, 6 etc...
+    ///         let index = x << 4 | y;
+    ///         let value = noise[index];
+    ///     }
+    /// }
+    /// ```
     pub fn generate_2d(&self, x: f32, y: f32, width: usize, height: usize) -> (Vec<f32>, f32, f32) {
         generate_2d(self, x, y, width, height)
     }
 
-    /// Generates a cube of noise. The result is a flat array that can be indexed
-    /// by x * X_WIDTH^2 + z * Z_WIDTH + y
-    /// It also returns the min and max value generated.
+    /// Generates a cube of noise. It also returns the min and max value generated.
+    ///
+    /// # Example
+    /// ```
+    /// let width = 16;
+    /// let height = 16;
+    /// let depth = 16;
+    /// let noise = Noise::perlin(0.01).generate_3d(0.0, 0.0, 0.0, width, height, depth);
+    /// for x in 0..width {
+    ///     for z in 0..depth {
+    ///         for y in 0..height {
+    ///             // This is how you should index the generated values
+    ///             let index = x * depth * height + z * height + y;
+    ///             let value = noise[index];
+    ///             // If width == height == depth and it's a power of 2 you can also index like this
+    ///             // 16 is 2^4 so we use 4/8 to shift. At 32 it would be 5/10, and 64, 6/12 etc...
+    ///             let index = x << 8 | z << 4 | y;
+    ///             let value = noise[index];
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub fn generate_3d(
         &self,
         x: f32,
@@ -202,30 +328,44 @@ impl Noise {
     }
 }
 
+/// The frequencies of a noise.
+///
+/// # Example
+/// ```
+/// // A convenient way to set the frequencies, as you usually want them to be the same.
+/// // If you intend to generate 1d/2d noise it doesn't matter if the remaining axis are
+/// // set.
+/// let noise = Noise::perlin(0.01);
+/// // Is equivalent to
+/// let noise = Noise::perlin(Frequency {
+///     x: 0.01,
+///     y: 0.01,
+///     z: 0.01
+/// });
+/// // Or
+/// let noise = Noise::perlin(Frequency::new_3d(0.01, 0.01, 0.01));
+/// ```
 #[derive(Clone, Copy, Debug)]
-struct Frequency {
-    x: f32,
-    y: f32,
-    z: f32,
+pub struct Frequency {
+    /// First dimension
+    pub x: f32,
+    /// Third dimension
+    pub y: f32,
+    /// Second dimension
+    pub z: f32,
 }
 
-impl From<[f32; 3]> for Frequency {
-    fn from(value: [f32; 3]) -> Self {
-        Self {
-            x: value[0],
-            y: value[1],
-            z: value[2],
-        }
+impl Frequency {
+    pub fn new_1d(x: f32) -> Self {
+        Self { x, y: 0.0, z: 0.0 }
     }
-}
 
-impl From<[f32; 2]> for Frequency {
-    fn from(value: [f32; 2]) -> Self {
-        Self {
-            x: value[0],
-            y: value[1],
-            z: value[1],
-        }
+    pub fn new_2d(x: f32, z: f32) -> Self {
+        Self { x, y: 0.0, z }
+    }
+
+    pub fn new_3d(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
 }
 
@@ -242,11 +382,9 @@ impl From<f32> for Frequency {
 #[derive(Clone, Debug)]
 enum NoiseSettings {
     Simplex {
-        seed: i32,
         frequency: Frequency,
     },
     Perlin {
-        seed: i32,
         frequency: Frequency,
     },
     Constant {
@@ -275,8 +413,8 @@ enum NoiseSettings {
     Min,
     Lerp,
     Range {
-        high: f32,
         low: f32,
+        high: f32,
     },
     Square,
 }
@@ -286,6 +424,7 @@ struct NoisePipeline<const N: usize>
 where
     LaneCount<N>: SupportedLaneCount,
 {
+    rng: Rng,
     index: usize,
     pipeline: Vec<NoiseNode<N>>,
     results: Vec<Simd<f32, N>>,
@@ -316,6 +455,8 @@ where
     #[inline(always)]
     fn execute(&mut self) -> Simd<f32, N> {
         self.index = 0;
+        self.rng.reset();
+
         unsafe { (self.pipeline[0].function)(self) };
         return self.results.pop().unwrap();
     }
@@ -353,6 +494,7 @@ where
         }
 
         NoisePipeline {
+            rng: Rng::new(noise.seed),
             index: 0,
             pipeline,
             results: Vec::new(),
@@ -598,4 +740,33 @@ fn generate_3d(
         }
     }
     (result, min, max)
+}
+
+// See WyRand https://github.com/wangyi-fudan/wyhash/blob/master/wyhash.h#L151
+#[derive(Debug, Clone)]
+struct Rng {
+    // We need to be able to reset the seed between each loop of the pipeline so we have to store
+    // it.
+    seed: u64,
+    current_seed: u64,
+}
+
+impl Rng {
+    fn new(seed: u64) -> Self {
+        Self {
+            seed,
+            current_seed: seed,
+        }
+    }
+
+    fn next(&mut self) -> i32 {
+        let seed = self.current_seed.wrapping_add(0x2d35_8dcc_aa6c_78a5);
+        self.current_seed = seed;
+        let t = u128::from(seed) * u128::from(seed ^ 0x8bb8_4b93_962e_acc9);
+        ((t as u64) ^ (t >> 64) as u64) as i32
+    }
+
+    fn reset(&mut self) {
+        self.current_seed = self.seed;
+    }
 }
