@@ -13,14 +13,14 @@ where
     let NoiseSettings::Fbm {
         octaves,
         gain,
-        scaled_amplitude,
+        first_octave_amplitude,
     } = node.settings
     else {
         unreachable!()
     };
 
     let gain = Simd::splat(gain);
-    let mut amplitude = Simd::splat(scaled_amplitude);
+    let mut amplitude = Simd::splat(first_octave_amplitude);
     let mut result = Simd::splat(0.0);
 
     for _ in 0..octaves {

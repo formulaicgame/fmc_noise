@@ -59,8 +59,6 @@ pub struct Noise {
 }
 
 impl Noise {
-    /// [Simplex noise](https://en.wikipedia.org/wiki/Simplex_noise)  
-    ///
     /// # Example
     /// ```rust
     /// let noise = Noise::simplex(0.01);
@@ -76,10 +74,7 @@ impl Noise {
         };
     }
 
-    /// [Perlin noise](https://en.wikipedia.org/wiki/Perlin_noise)  
-    ///
     /// # Example
-    /// See [`Frequency`] for convenient [`From`] implementations.
     /// ```rust
     /// let noise = Noise::perlin(0.01);
     /// // Is equivalent to
@@ -125,8 +120,6 @@ impl Noise {
         self
     }
 
-    /// [Fractal Brownian Motion](https://en.wikipedia.org/wiki/Fractional_Brownian_motion)
-    ///
     /// Computes `octaves` layers of noise and adds them together, normalizing the result. Each
     /// consecutive octave has its frequency multiplied by `lacunarity` and its amplitude
     /// multiplied by `gain`.
@@ -146,44 +139,44 @@ impl Noise {
         // 1/1.5 == 2/3, the second octave's amplitude becomes 2/3 * 0.5 = 1/3 and we end up with a
         // normalized result naturally.
         let mut amp = gain;
-        let mut scaled_amplitude = 1.0;
+        let mut total_amplitude = 1.0;
         for _ in 1..octaves {
-            scaled_amplitude += amp;
+            total_amplitude += amp;
             amp *= gain;
         }
-        scaled_amplitude = 1.0 / scaled_amplitude;
+        let first_octave_amplitude = 1.0 / total_amplitude;
 
-        // It's not possible to apply the lacunarity when executing as we don't know that the
-        // noise is included in an fbm node before we reach it in the pipeline. Instead we have to
-        // pre-apply the lacunarity to the frequency. The fbm node adds the results of the noises from
-        // last to first, so lacunarity is also applied in that order. .i.e. the first noise is the most
-        // lacunarized.
-        let len = self.pipeline.len();
-        for i in (1..octaves).rev() {
-            let current_len = self.pipeline.len();
-            let settings = &mut self.pipeline[current_len - len];
-            match settings {
-                NoiseSettings::Simplex { frequency, .. } => {
-                    let lacunarity = lacunarity.powi(i as i32 - 1);
-                    frequency.x *= lacunarity;
-                    frequency.y *= lacunarity;
-                    frequency.z *= lacunarity;
+        // Add the octaves so that they go from most lacunarized to least since they are added in
+        // reverse order during computation.
+        let initial_pipeline = std::mem::replace(&mut self.pipeline, Vec::new());
+        for i in (0..octaves).rev() {
+            let mut pipeline = initial_pipeline.clone();
+
+            let lacunarity = lacunarity.powi(i as i32);
+
+            for settings in pipeline.iter_mut() {
+                match settings {
+                    NoiseSettings::Simplex { ref mut frequency } => {
+                        frequency.x *= lacunarity;
+                        frequency.y *= lacunarity;
+                        frequency.z *= lacunarity;
+                    }
+                    NoiseSettings::Perlin { ref mut frequency } => {
+                        frequency.x *= lacunarity;
+                        frequency.y *= lacunarity;
+                        frequency.z *= lacunarity;
+                    }
+                    _ => (),
                 }
-                NoiseSettings::Perlin { frequency, .. } => {
-                    let lacunarity = lacunarity.powi(i as i32 - 1);
-                    frequency.x *= lacunarity;
-                    frequency.y *= lacunarity;
-                    frequency.z *= lacunarity;
-                }
-                _ => (),
             }
-            self.pipeline.extend_from_within(0..len);
+
+            self.pipeline.append(&mut pipeline);
         }
 
         self.pipeline.push(NoiseSettings::Fbm {
             octaves,
             gain,
-            scaled_amplitude,
+            first_octave_amplitude,
         });
         self
     }
@@ -342,8 +335,6 @@ impl Noise {
 ///     y: 0.01,
 ///     z: 0.01
 /// });
-/// // Or
-/// let noise = Noise::perlin(Frequency::new_3d(0.01, 0.01, 0.01));
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Frequency {
@@ -353,20 +344,6 @@ pub struct Frequency {
     pub y: f32,
     /// Second dimension
     pub z: f32,
-}
-
-impl Frequency {
-    pub fn new_1d(x: f32) -> Self {
-        Self { x, y: 0.0, z: 0.0 }
-    }
-
-    pub fn new_2d(x: f32, z: f32) -> Self {
-        Self { x, y: 0.0, z }
-    }
-
-    pub fn new_3d(x: f32, y: f32, z: f32) -> Self {
-        Self { x, y, z }
-    }
 }
 
 impl From<f32> for Frequency {
@@ -399,8 +376,8 @@ enum NoiseSettings {
         // i.e. A gain of 2.0 will cause each octave to be twice as impactful on the result as the
         // previous one.
         gain: f32,
-        // Automatically derived amplitude scaling factor.
-        scaled_amplitude: f32,
+        // Derived scaled amplitude for normalizing the result.
+        first_octave_amplitude: f32,
     },
     Abs,
     Add,
@@ -557,7 +534,7 @@ fn generate_1d(noise: &Noise, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
         min_s = min_s.simd_min(f);
         f.copy_to_slice(&mut result[i..]);
         i += vector_width;
-        pipeline.x += Simd::splat(vector_width as f32);
+        pipeline.x = pipeline.x + Simd::splat(vector_width as f32);
     }
     if remainder != 0 {
         let f = pipeline.execute();
@@ -606,27 +583,27 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
 
     let vector_width = N;
     let remainder = width % vector_width;
-    let mut x_arr = Vec::with_capacity(vector_width);
+    let mut y_arr = Vec::with_capacity(vector_width);
     unsafe {
-        x_arr.set_len(vector_width);
+        y_arr.set_len(vector_width);
     }
     for i in (0..vector_width).rev() {
-        x_arr[i] = x + i as f32;
+        y_arr[i] = y + i as f32;
     }
 
     let mut pipeline = NoisePipeline::<N>::build(noise, Dimensions::XY);
-    pipeline.y = Simd::splat(y);
 
+    pipeline.x = Simd::splat(x);
     let mut i = 0;
     for _ in 0..height {
-        pipeline.x = Simd::from_slice(&x_arr);
+        pipeline.y = Simd::from_slice(&y_arr);
         for _ in 0..width / vector_width {
             let f = pipeline.execute();
             max_s = max_s.simd_max(f);
             min_s = min_s.simd_min(f);
             f.copy_to_slice(&mut result[i..]);
             i += vector_width;
-            pipeline.x += Simd::splat(vector_width as f32);
+            pipeline.y = pipeline.y + Simd::splat(vector_width as f32);
         }
         if remainder != 0 {
             let f = pipeline.execute();
@@ -644,7 +621,7 @@ fn generate_2d(noise: &Noise, x: f32, y: f32, width: usize, height: usize) -> (V
                 i += 1;
             }
         }
-        pipeline.y += Simd::splat(1.0);
+        pipeline.x = pipeline.x + Simd::splat(1.0);
     }
     for i in 0..vector_width {
         if min_s[i] < min {
@@ -682,7 +659,6 @@ fn generate_3d(
     unsafe {
         result.set_len(width * height * depth);
     }
-    let mut i = 0;
     let vector_width = N;
     let remainder = height % vector_width;
     let mut y_arr = Vec::with_capacity(vector_width);
@@ -699,6 +675,7 @@ fn generate_3d(
     // values of the first axis is transfered to the second, and same for second to third every
     // iteration.
     pipeline.x = Simd::splat(x);
+    let mut i = 0;
     for _ in 0..width {
         pipeline.z = Simd::splat(z);
         for _ in 0..depth {
@@ -709,7 +686,7 @@ fn generate_3d(
                 min_s = min_s.simd_min(f);
                 f.copy_to_slice(&mut result[i..]);
                 i += vector_width;
-                pipeline.y += Simd::splat(vector_width as f32);
+                pipeline.y = pipeline.y + Simd::splat(vector_width as f32);
             }
             if remainder != 0 {
                 let f = pipeline.execute();
@@ -727,9 +704,9 @@ fn generate_3d(
                     i += 1;
                 }
             }
-            pipeline.z += Simd::splat(1.0);
+            pipeline.z = pipeline.z + Simd::splat(1.0);
         }
-        pipeline.x += Simd::splat(1.0);
+        pipeline.x = pipeline.x + Simd::splat(1.0);
     }
     for i in 0..vector_width {
         if min_s[i] < min {
