@@ -234,7 +234,6 @@ impl Noise {
     /// Interpolate between the high and low noise. When the input noise is above 'high' it's
     /// clamped to the high noise, and below 'low' to the low noise. When in-between, use the input
     /// noise to linearly interpolate between them.
-    /// <div class="warning">The 'self' noise is required to be in the -1..1 range.</div>
     pub fn range(mut self, low: f32, high: f32, mut low_noise: Self, mut high_noise: Self) -> Self {
         // XXX: Append order is important for result order
         self.pipeline.append(&mut high_noise.pipeline);
