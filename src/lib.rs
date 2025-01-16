@@ -248,12 +248,12 @@ impl Noise {
         self
     }
 
-    /// Generates a line of noise. It also returns the min and max value generated.
+    /// Generates a line of noise. It also returns the min and max values generated.
     ///
     /// # Example
     /// ```
     /// let width = 16;
-    /// let noise = Noise::perlin(0.01).generate_1d(0.0, width);
+    /// let (noise, _min, _max) = Noise::perlin(0.01).generate_1d(0.0, width);
     /// for x in 0..width {
     ///     let value = noise[x];
     /// }
@@ -262,13 +262,13 @@ impl Noise {
         generate_1d(self, x, width)
     }
 
-    /// Generates a plane of noise. It also returns the min and max value generated.
+    /// Generates a plane of noise. It also returns the min and max values generated.
     ///
     /// # Example
     /// ```
     /// let width = 16;
     /// let height = 16;
-    /// let noise = Noise::perlin(0.01).generate_2d(0.0, 0.0, width, height);
+    /// let (noise, _min, _max) = Noise::perlin(0.01).generate_2d(0.0, 0.0, width, height);
     /// for x in 0..width {
     ///     for y in 0..height {
     ///         // This is how you should index the generated values
@@ -285,14 +285,14 @@ impl Noise {
         generate_2d(self, x, y, width, height)
     }
 
-    /// Generates a cube of noise. It also returns the min and max value generated.
+    /// Generates a cube of noise. It also returns the min and max values generated.
     ///
     /// # Example
     /// ```
     /// let width = 16;
     /// let height = 16;
     /// let depth = 16;
-    /// let noise = Noise::perlin(0.01).generate_3d(0.0, 0.0, 0.0, width, height, depth);
+    /// let (noise, _min, _max) = Noise::perlin(0.01).generate_3d(0.0, 0.0, 0.0, width, height, depth);
     /// for x in 0..width {
     ///     for z in 0..depth {
     ///         for y in 0..height {
