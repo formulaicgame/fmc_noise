@@ -1,0 +1,16 @@
+[package]
+name = "fmc_noise_macros"
+version = "0.8.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Implementation crate for fmc_noise"
+
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits", "visit", "visit-mut", "printing"] }
+quote = "1"
+proc-macro2 = "1"
+target-features = "0.1.6"

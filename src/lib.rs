@@ -2,7 +2,7 @@
 
 use std::simd::prelude::*;
 
-use multiversion::{multiversion, target::selected_target};
+use multiversion::{multiversion, selected_target};
 use std::simd::{LaneCount, SupportedLaneCount};
 
 mod abs;
@@ -259,7 +259,7 @@ impl Noise {
     /// }
     /// ```
     pub fn generate_1d(&self, x: f32, width: usize) -> (Vec<f32>, f32, f32) {
-        generate_1d(self, x, width)
+        unsafe { (generate_1d())(self, x, width) }
     }
 
     /// Generates a plane of noise. It also returns the min and max values generated.
@@ -282,7 +282,7 @@ impl Noise {
     /// }
     /// ```
     pub fn generate_2d(&self, x: f32, y: f32, width: usize, height: usize) -> (Vec<f32>, f32, f32) {
-        generate_2d(self, x, y, width, height)
+        unsafe { (generate_2d())(self, x, y, width, height) }
     }
 
     /// Generates a cube of noise. It also returns the min and max values generated.
@@ -316,7 +316,7 @@ impl Noise {
         height: usize,
         depth: usize,
     ) -> (Vec<f32>, f32, f32) {
-        generate_3d(self, x, y, z, width, height, depth)
+        unsafe { (generate_3d())(self, x, y, z, width, height, depth) }
     }
 }
 
