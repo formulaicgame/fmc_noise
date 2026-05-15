@@ -1,13 +1,10 @@
 use multiversion::multiversion;
 
 use crate::{NoisePipeline, NoiseSettings};
-use std::simd::{LaneCount, Simd, SupportedLaneCount};
+use std::simd::Simd;
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn fbm<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn fbm<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let node = pipeline.current_node();
 
     let NoiseSettings::Fbm {

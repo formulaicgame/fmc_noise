@@ -1,6 +1,6 @@
 [package]
 name = "fmc_noise"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 repository = "https://github.com/formulaicgame/fmc_noise/"
 description = "SIMD gradient noise library"

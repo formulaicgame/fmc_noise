@@ -1,14 +1,11 @@
-use std::simd::{prelude::*, LaneCount, Simd, SupportedLaneCount};
+use std::simd::{prelude::*, Simd};
 
 use multiversion::multiversion;
 
 use crate::{NoisePipeline, NoiseSettings};
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn clamp<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn clamp<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let node = pipeline.current_node();
     let NoiseSettings::Clamp { min, max } = node.settings else {
         unreachable!()

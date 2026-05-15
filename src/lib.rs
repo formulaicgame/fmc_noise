@@ -3,7 +3,6 @@
 use std::simd::prelude::*;
 
 use multiversion::{multiversion, selected_target};
-use std::simd::{LaneCount, SupportedLaneCount};
 
 mod abs;
 mod add;
@@ -396,10 +395,7 @@ enum NoiseSettings {
 }
 
 #[derive(Debug)]
-struct NoisePipeline<const N: usize>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+struct NoisePipeline<const N: usize> {
     rng: Rng,
     index: usize,
     pipeline: Vec<NoiseNode<N>>,
@@ -409,10 +405,7 @@ where
     z: Simd<f32, N>,
 }
 
-impl<const N: usize> NoisePipeline<N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+impl<const N: usize> NoisePipeline<N> {
     #[inline(always)]
     #[track_caller]
     fn current_node(&self) -> &NoiseNode<N> {
@@ -488,10 +481,7 @@ enum Dimensions {
 }
 
 #[derive(Debug)]
-struct NoiseNode<const N: usize>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+struct NoiseNode<const N: usize> {
     pub settings: NoiseSettings,
     pub function: unsafe fn(pipeline: &mut NoisePipeline<N>),
 }

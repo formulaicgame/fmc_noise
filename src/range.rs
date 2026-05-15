@@ -1,14 +1,11 @@
-use std::simd::{prelude::*, LaneCount, Simd, StdFloat, SupportedLaneCount};
+use std::simd::{prelude::*, Simd, StdFloat};
 
 use multiversion::multiversion;
 
 use crate::{NoisePipeline, NoiseSettings};
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn range<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn range<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let low_noise = pipeline.results.pop().unwrap();
     let high_noise = pipeline.results.pop().unwrap();
     let selector_noise = pipeline.results.pop().unwrap();

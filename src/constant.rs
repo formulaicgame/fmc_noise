@@ -1,14 +1,11 @@
-use std::simd::{LaneCount, Simd, SupportedLaneCount};
+use std::simd::Simd;
 
 use multiversion::multiversion;
 
 use crate::{NoisePipeline, NoiseSettings};
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn constant<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn constant<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let node = pipeline.current_node();
 
     let NoiseSettings::Constant { value } = node.settings else {

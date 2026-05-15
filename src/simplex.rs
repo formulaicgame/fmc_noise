@@ -1,5 +1,5 @@
 use std::simd::prelude::*;
-use std::simd::{LaneCount, StdFloat, SupportedLaneCount};
+use std::simd::StdFloat;
 
 use multiversion::multiversion;
 
@@ -47,10 +47,7 @@ const PERM: [i32; 512] = [
 ///
 /// Produces a value -1 ≤ n ≤ 1.
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_1d<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn simplex_1d<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let node = pipeline.current_node();
 
     let NoiseSettings::Simplex { frequency } = node.settings else {
@@ -120,10 +117,7 @@ where
 ///
 /// Produces a value -1 ≤ n ≤ 1.
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_2d<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn simplex_2d<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     const SQRT3: f32 = 1.7320508075688772935274463415059;
     const F2: f32 = 0.5 * (SQRT3 - 1.0);
     const G2: f32 = (3.0 - SQRT3) / 6.0;
@@ -187,10 +181,7 @@ where
 }
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn simplex_3d<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn simplex_3d<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     const F3: f32 = 1.0 / 3.0;
     const G3: f32 = 1.0 / 2.0;
 

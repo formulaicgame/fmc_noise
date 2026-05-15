@@ -1,10 +1,7 @@
-use std::simd::{prelude::*, LaneCount, StdFloat, SupportedLaneCount};
+use std::simd::{prelude::*, StdFloat};
 
 #[inline(always)]
-pub fn grad1<const N: usize>(seed: Simd<i32, N>, hash: Simd<i32, N>) -> Simd<f32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn grad1<const N: usize>(seed: Simd<i32, N>, hash: Simd<i32, N>) -> Simd<f32, N> {
     let h = (seed ^ hash) & Simd::splat(15);
     let v = (h & Simd::splat(7)).cast();
 
@@ -17,10 +14,7 @@ pub fn grad2<const N: usize>(
     hash: Simd<i32, N>,
     mut x: Simd<f32, N>,
     mut y: Simd<f32, N>,
-) -> Simd<f32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+) -> Simd<f32, N> {
     const ROOT2: f32 = 1.4142135623730950488;
     // ( 1+R2, 1 ) ( -1-R2, 1 ) ( 1+R2, -1 ) ( -1-R2, -1 )
     // ( 1, 1+R2 ) ( 1, -1-R2 ) ( -1, 1+R2 ) ( -1, -1-R2 )
@@ -30,7 +24,7 @@ where
 
     // TODO: Implemented without knowing what the sign is supposed to be. Think it might need to be
     // negated.
-    let bit4 = Mask::from_int((hash << Simd::splat(29)) >> Simd::splat(31));
+    let bit4 = Mask::from_simd((hash << Simd::splat(29)) >> Simd::splat(31));
 
     x = Simd::from_bits(x.to_bits() ^ bit1.cast::<u32>());
     y = Simd::from_bits(y.to_bits() ^ bit2.cast::<u32>());
@@ -49,10 +43,7 @@ pub fn grad3d_dot<const N: usize>(
     x: Simd<f32, N>,
     y: Simd<f32, N>,
     z: Simd<f32, N>,
-) -> Simd<f32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+) -> Simd<f32, N> {
     let hasha13 = hash & Simd::splat(13);
 
     //if h < 8 then x, else y
@@ -74,10 +65,11 @@ where
 }
 
 #[inline(always)]
-pub fn hash2d<const N: usize>(seed: Simd<i32, N>, i: Simd<i32, N>, j: Simd<i32, N>) -> Simd<i32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn hash2d<const N: usize>(
+    seed: Simd<i32, N>,
+    i: Simd<i32, N>,
+    j: Simd<i32, N>,
+) -> Simd<i32, N> {
     let mut hash = seed;
     hash ^= i;
     hash ^= j;
@@ -92,10 +84,7 @@ pub fn hash3d<const N: usize>(
     i: Simd<i32, N>,
     j: Simd<i32, N>,
     k: Simd<i32, N>,
-) -> Simd<i32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+) -> Simd<i32, N> {
     let mut hash = seed;
     hash ^= i;
     hash ^= j;

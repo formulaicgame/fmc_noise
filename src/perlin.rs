@@ -1,5 +1,5 @@
 use std::simd::prelude::*;
-use std::simd::{LaneCount, StdFloat, SupportedLaneCount};
+use std::simd::StdFloat;
 
 use multiversion::multiversion;
 
@@ -14,10 +14,7 @@ pub const Y_PRIME: i32 = 1136930381;
 pub const Z_PRIME: i32 = 1720413743;
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn perlin_2d<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn perlin_2d<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let node = pipeline.current_node();
 
     let NoiseSettings::Perlin { frequency } = node.settings else {
@@ -66,10 +63,7 @@ where
     pipeline.next();
 }
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn perlin_3d<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn perlin_3d<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let node = pipeline.current_node();
 
     let NoiseSettings::Perlin { frequency } = node.settings else {
@@ -141,18 +135,12 @@ where
 }
 
 #[inline(always)]
-fn lerp<const N: usize>(a: Simd<f32, N>, b: Simd<f32, N>, t: Simd<f32, N>) -> Simd<f32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+fn lerp<const N: usize>(a: Simd<f32, N>, b: Simd<f32, N>, t: Simd<f32, N>) -> Simd<f32, N> {
     return t.mul_add(b - a, a);
 }
 
 #[inline(always)]
-fn interpolate_quintic<const N: usize>(v: Simd<f32, N>) -> Simd<f32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+fn interpolate_quintic<const N: usize>(v: Simd<f32, N>) -> Simd<f32, N> {
     return v
         * v
         * v

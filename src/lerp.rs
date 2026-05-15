@@ -1,14 +1,11 @@
-use std::simd::{LaneCount, Simd, StdFloat, SupportedLaneCount};
+use std::simd::{Simd, StdFloat};
 
 use multiversion::multiversion;
 
 use crate::NoisePipeline;
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn lerp<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn lerp<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let low = pipeline.results.pop().unwrap();
     let high = pipeline.results.pop().unwrap();
     let selector = pipeline.results.pop().unwrap();

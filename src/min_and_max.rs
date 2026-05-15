@@ -1,14 +1,11 @@
-use std::simd::{prelude::*, LaneCount, SupportedLaneCount};
+use std::simd::prelude::*;
 
 use multiversion::multiversion;
 
 use crate::NoisePipeline;
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn max<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn max<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let left = pipeline.results.pop().unwrap();
     let right = pipeline.results.pop().unwrap();
     let result = left.simd_max(right);
@@ -17,10 +14,7 @@ where
 }
 
 #[multiversion(targets = "simd", dispatcher = "pointer")]
-pub fn min<const N: usize>(pipeline: &mut NoisePipeline<N>)
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+pub fn min<const N: usize>(pipeline: &mut NoisePipeline<N>) {
     let left = pipeline.results.pop().unwrap();
     let right = pipeline.results.pop().unwrap();
     let result = left.simd_min(right);
